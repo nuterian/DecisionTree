@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<link href="css/bootstrap.min.css" rel="stylesheet" media="screen">
+	<link rel="stylesheet" type="text/css" href="css/style.css">
+	
+</head>
+<body>
+	<div class="wrapper">
+		<h2 class="title">Decision Tree Classifier</h2>
+
+		<h3><span class="number">1</span>Select a Training Set</h3>
+		<table class="table table-bordered" id="trainingDataTable">
+			<thead>
+				<tr>
+					<th>Name</th>
+					<th>Last Modified</th>
+					<th class="actions"><button class="btn btn-success" id="createButton">Create New</button></th>
+				</tr>
+			</thead>
+
+			<tbody>
+
+			</tbody>
+		</table>
+
+		<div id="trainDataContainer" data="">
+			<h3><span class="number">2</span>Add Training Data</h3>
+			<textarea id="trainInput"></textarea>
+			<div class="clearfix">
+				<div class="pull-left">
+					<div class="input-append">
+						<input style="width:20px" type="text" value="," id="parseDelInput">
+						<button class="btn btn-primary" type="button" id="parseButton">Parse & Generate</button>
+					</div>
+				</div>
+				<div class="input-append pull-right">
+					<input class="span3" type="text" placeholder="Name for Train Data" id="trainNameInput">
+					<button class="btn btn-warning" type="button" id="saveButton">Save</button>
+				</div>			
+			</div>
+		</div>
+
+		<div id="treeEntropyContainer">
+			<h4>Class-wise efficiency of Generated Trees</h4>
+			<table class="table table-bordered" id="treeEntropyTable">
+				
+			</table>
+		</div>
+
+		<div id="testInputContainer">
+			<h3><span class="number">3</span>Test</h3>
+			<input type="text" id="testInput" placeholder="Enter Test Data"/>
+			<div class="clearfix">
+				<div class="pull-left">
+					<input type="button" class="btn btn-primary" value="Predict Class" id="testButton"/>
+				</div>
+				<div class="pull-right" id="testResult">
+					
+				</div>
+			</div>	
+		</div>
+
+		<div class="footer">
+			Developed by Jugal Manjeshwar
+		</div>
+
+	</div>	
+
+	<script type="text/javascript" src="js/jquery-2.0.3.min.js"></script>
+	<script type="text/javascript" src="js/main.js"></script>
+</body>
+</html
