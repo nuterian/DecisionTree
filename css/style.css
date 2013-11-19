@@ -28,8 +28,76 @@ td.actions>*{visibility: hidden}
 tr:hover>td.actions>*{visibility: visible;}
 th.actions, td.actions{text-align:right;}
 tbody>tr{padding:10px 0; line-height:26px;}
-tbody>tr:hover{background-color:#f6f6f6; cursor:pointer;}
+#trainingDataTable tbody>tr:hover{background-color:#f6f6f6; cursor:pointer;}
 td.title{color:#0088cc;font-weight:bold;}
 span.light{color:#888;}
 
+#treeEntropyTable th{cursor: pointer;}
+th.active{
+	background-color:#FFF3D9;
+}
+
 .footer{padding:50px 0;color:#888;}
+
+/*
+	SVG Tree Classes
+*/
+
+/*
+text {
+  font-family: "Helvetica Neue", Helvetica, sans-serif;
+  font-size:12px;
+  font-weight: bold;
+   fill:#fff;
+}
+text.attrib{
+  text-transform: uppercase;
+  fill:#333;
+}
+text.label{
+
+}
+
+.linkPath {
+  stroke: #aaa;
+  stroke-opacity: .6;
+}
+
+path.textpath {
+    fill: none;
+    stroke: none;
+}
+
+.edgelabel{ 
+  font-size:12px;
+  font-weight:bold;
+}
+
+
+*/
+
+#treeVisContainer{
+	border:1px solid #ddd;
+	border-radius:3px;
+	overflow:hidden;
+}
+
+rect {
+    fill: #fff;
+}
+
+.node rect {
+    stroke-width: 1.5px;
+    stroke: #333;
+    fill: none;
+}
+
+.edge rect {
+    fill: #fff;
+}
+
+.edge path {
+    fill: none;
+    stroke: #aaa;
+    stroke-width: 1px;
+}

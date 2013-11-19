@@ -114,6 +114,16 @@ function distinctVals(table, column)
     return distinct;
 }
 
+function genTableInfo(table)
+{
+    var tableInfo = [];
+    for(attr in table[0]){
+        tableInfo[attr] = distinctVals(table, attr);
+    }
+    return tableInfo;
+}
+
+
 function getPruned(table, column, value)
 {
     var pruned = [];
@@ -177,48 +187,66 @@ function frequentVal(table, column)
     var distinct = distinctVals(table, column);
     var maxFrequency = -1;
     var maxVal = "";
+    var entropy = 0;
     for(val in distinct){
         if (distinct[val] > maxFrequency){
             maxFrequency = distinct[val];
             maxVal = val;
         }
+        entropy -= (distinct[val]/table.length) * Math.log(distinct[val]/table.length)/Math.log(2);
     }
-    return {val: maxVal, prob: maxFrequency/table.length};
+    return {val: maxVal, prob: maxFrequency/table.length, entropy: entropy, norm: Object.keys(distinct).length};
 }
 
-function genTree(node, table, label_column)
+
+
+function gTree(node, table, tableInfo, label_column, default_label)
 {
     var ret = {leaves:0, entropy:0};
+    if(table.length < 1){
 
-    if(Object.keys(table[0]).length == 1){
         node.isLeaf = true;
 
-        var freq_val = frequentVal(table, label_column);
-        node.attribute = freq_val.val;
-        node.chance = freq_val.prob;
+        node.attribute = default_label.val;
+        node.chance = default_label.prob;
 
-        return {leaves:1, entropy: (node.chance * (Math.log(node.chance)/Math.log(2)))};
+        //console.log("EMPTY: "+node.label+"->"+node.attribute);
+        return {leaves: default_label.norm, entropy: default_label.entropy};
+    }
+    else if(Object.keys(table[0]).length == 1){
+
+        node.isLeaf = true;
+
+        node.attribute = default_label.val;
+        node.chance = default_label.prob;
+
+        //console.log("SINGLE: "+node.label+"->"+node.attribute);
+        return {leaves:default_label.norm, entropy: default_label.entropy};
     }
     else if(isHomo(table, label_column)){
+
         node.isLeaf = true;
         node.attribute = table[0][label_column];
-        return {leaves: 1, entropy: 0};
+
+        return {leaves: 1, entropy: 0};        
     }
     else
     {
         var split = decideSplitting(table, label_column);
-        //console.log("LAB:"+label_column+"SPLIT: "+split);
         node.attribute = split;
 
-        var distinct = distinctVals(table, split);
-        for(k in distinct){
+        for(k in tableInfo[split]){
             var newnode = new Node();
+
             newnode.label = k;
             node.children.push(newnode);
 
+            var p_default_label = frequentVal(table, label_column);
             var p_table = getPruned(table, split, k);
-            var res = genTree(newnode, p_table, label_column);
-            ret.entropy -= res.entropy;
+            var res = gTree(newnode, p_table, tableInfo, label_column, p_default_label);
+
+            console.log(ret.entropy + " | "+res.entropy);
+            ret.entropy += res.entropy;
             ret.leaves += res.leaves;
         }            
     }
@@ -226,160 +254,3 @@ function genTree(node, table, label_column)
 }
 
 
-/*
-$("#parseButton").click(function(){
-    var arr = CSVToArray($("#trainInput").val(), ",");
-    //console.log(arr);
-    var table = genTable(arr);
-    console.log(table);
-
-    var root = new Node();
-    root = genTree(root, table, "restaurant");
-
-
-    console.log(JSON.stringify(root));
-});
-*/
-
-
-$(function(){
-    $trainDataContainer = $("#trainDataContainer");
-    $trainInput = $("#trainInput");
-    $trainNameInput = $("#trainNameInput");
-    $trainTable = $("#trainingDataTable > tbody");
-    $treeEntropyTable = $("#treeEntropyTable");
-
-    _curTable = [];
-    _curTrees = {};
-    
-    function listSets(){
-        $trainTable.html('');
-        var sets = JSON.parse(localStorage['DTClass.sets']);
-        for(var i=0; i<sets.length; i++){
-            $trainTable.append('<tr data="'+i+'"><td class="title">'+sets[i].name+'</td><td>'+sets[i].modified+'<td class="actions"></td></tr>');
-        }        
-    }
-
-    function loadTrainSet(id)
-    {
-        if($trainDataContainer.is(':hidden')) $trainDataContainer.show();
-        $("#treeEntropyContainer").hide();
-        $("#testInputContainer").hide();
-
-        var sets = JSON.parse(localStorage['DTClass.sets']);
-        $trainInput.val(sets[id].raw_train);
-        $trainDataContainer.attr("data", id);
-        $trainNameInput.val(sets[id].name);
-    }
-
-    $("#createButton").click(function(){
-        $trainDataContainer.show();
-        $trainInput.val('');
-        $("#treeEntropyContainer").hide();
-        $("#testInputContainer").hide();
-    });
-
-    $("#saveButton").click(function(){
-        var d = new Date();
-        var set = {
-            name: $trainNameInput.val(),
-            raw_train: $trainInput.val(),
-            modified: d.toLocaleDateString() + " " + d.toLocaleTimeString()
-        };
-        var sets = JSON.parse(localStorage['DTClass.sets']);
-        var id = $trainDataContainer.attr("data");
-        if(id == ""){
-            $trainDataContainer.attr("data", sets.length);
-            sets.push(set);
-        }
-        else
-            sets[id] = set;
-
-        localStorage['DTClass.sets'] = JSON.stringify(sets);
-
-        listSets();
-    });
-
-    function showTreeEfficiencies()
-    {
-        $("#treeEntropyContainer").show();
-        $treeEntropyTable.html('');
-        $treeEntropyTable.append("<thead><tr></tr></thead>");
-        $treeEntropyTable.append("<tbody><tr></tr></tbody>");
-        
-        for(attrib in _curTrees){
-            //console.log(attrib);
-            $treeEntropyTable.find("thead tr").append("<th>"+attrib+"</th>");
-            $treeEntropyTable.find("tbody tr").append("<td>"+((1-_curTrees[attrib].efficiency)*100).toFixed(2)+"%</td>");
-        }
-    }
-
-    $("#parseButton").click(function(){
-
-        var arr = CSVToArray($trainInput.val(), $("#parseDelInput").val());
-        _curTable = genTable(arr);
-
-        _curTrees = {};
-        for(attrib in _curTable[0]){
-            var root = new Node();
-            var tree = genTree(root, _curTable, attrib);
-            _curTrees[attrib] = {root: root, efficiency: tree.entropy/(Math.log(tree.leaves)/Math.log(2))};
-        }
-        showTreeEfficiencies();
-        $("#testInputContainer").show();
-        //console.log(_curTrees);
-    });
-
-    function getLabel(node, test)
-    {
-        if(node.isLeaf){return {label:node.attribute, chance: node.chance};}
-
-        for(var i=0; i<node.children.length; i++){
-            if(test[node.attribute] == node.children[i].label){
-                return getLabel(node.children[i], test);
-                break;
-            }
-        }
-    }
-
-    function predictLabel(arr)
-    {
-        var test = {}, i=0, predAttr = "", f=0;
-        for(attr in _curTable[0]){
-            test[attr] = arr[i++];
-            if(test[attr] == ""){
-                if (f == 1) return null;
-                predAttr = attr;
-                f=1;
-            }
-        }
-        console.log(arr);
-        if (predAttr == "") return null;
-
-        console.log(JSON.stringify(_curTrees[predAttr].root));
-        return { attrib: predAttr, label: getLabel(_curTrees[predAttr].root, test) };
-    }
-
-    $("#testButton").click(function(){
-        if($("#testInput").val() == "") return;
-        var arr = CSVToArray($("#testInput").val(), ",");
-        arr = arr[0];
-        var label = predictLabel(arr);
-
-        if(label == null) return;
-        $("#testResult").html("<strong>"+label.attrib+":</strong> "+label.label.label+"<span class='light'> with "+(label.label.chance*100).toFixed(2)+"% chance</span>");
-    });
-
-    $trainTable.on("click", "tr", function(e){
-        console.log(e.currentTarget);
-        loadTrainSet($(e.currentTarget).attr("data"));
-    });
-
-    if (!("DTClass.sets" in localStorage) || localStorage['DTClass.sets'] == "[]"){
-        localStorage["DTClass.sets"] = JSON.stringify([]);
-        $trainTable.html('<td colspan="3" style="text-align:center; padding:30px 0">No Training sets found. Click the button above to create one.</td>');
-    }
-    else{
-        listSets();
-    }
-});

@@ -11,6 +11,9 @@
 		<h2 class="title">Decision Tree Classifier</h2>
 
 		<h3><span class="number">1</span>Select a Training Set</h3>
+		<!--
+		<span class="help-block">Create or Load a Training Set</span>
+		-->
 		<table class="table table-bordered" id="trainingDataTable">
 			<thead>
 				<tr>
@@ -27,6 +30,9 @@
 
 		<div id="trainDataContainer" data="">
 			<h3><span class="number">2</span>Add Training Data</h3>
+			<!--
+			<span class="help-block">Enter the training data in CSV format using optinally defined delimiters. You can save your training set by giving it a name. When it is ready, click 'Parse & Generate' to begin training.</span>
+			-->
 			<textarea id="trainInput"></textarea>
 			<div class="clearfix">
 				<div class="pull-left">
@@ -43,10 +49,15 @@
 		</div>
 
 		<div id="treeEntropyContainer">
-			<h4>Class-wise efficiency of Generated Trees</h4>
+			<h4>Class-wise normalized entropies</h4>
+			<span class="help-block">Click on the class titles below to show the corresponding Decision Tree</span>
 			<table class="table table-bordered" id="treeEntropyTable">
 				
 			</table>
+
+			<div id="treeVisContainer">
+				
+			</div>
 		</div>
 
 		<div id="testInputContainer">
@@ -69,6 +80,9 @@
 	</div>	
 
 	<script type="text/javascript" src="js/jquery-2.0.3.min.js"></script>
+	<script type="text/javascript" src="js/d3.v3.min.js"></script>
+	<script type="text/javascript" src="js/dagre-d3.min.js"></script>
 	<script type="text/javascript" src="js/main.js"></script>
+	<script type="text/javascript" src="js/ui.js"></script>
 </body>
 </html
