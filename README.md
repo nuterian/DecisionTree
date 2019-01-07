@@ -1,6 +1,3 @@
-DecisionTree
-============
+A decision tree classifier app using the ID3 algorithm written in Javascript.
 
-A Decision Tree Classifier app written in Javascript
-
-Live Demo: http://nuterian.github.io/DecisionTree/
+Demo: http://nuterian.github.io/DecisionTree
