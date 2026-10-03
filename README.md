@@ -1,23 +1,26 @@
-# Decision Tree
+# ditify playground
 
-**Paste a table. Leave a blank. Ask why.**
+**Decision trees that explain themselves.** A live demo of
+[ditify](https://github.com/nuterian/ditify): train on 1,000 rows in
+milliseconds, ask anything, and see exactly why it answered.
 
-A tiny web app for exploring decision trees, built on
-[ditify](https://github.com/nuterian/ditify). There's no build step and no
-framework, and your data never leaves the browser.
+**▶ http://nuterian.github.io/DecisionTree**
 
-Demo: http://nuterian.github.io/DecisionTree
+- **Three ready-made datasets:** customer churn (1,000 rows), loan decisions
+  (1,000 rows, three outcomes) and the classic play-tennis set. You can also
+  paste or drop your own CSV.
+- **A tree you can see.** The answer's path lights up, edges are as thick as the
+  rows that flow through them, and clicking any node asks about it.
+- **Live knobs.** Depth, minimum leaf size and smoothing retrain the model on
+  every move, and held-out accuracy updates as you drag.
+- **Real numbers.** Training time, per-answer latency (well under a
+  microsecond), and honest accuracy on rows the model never saw. One click
+  trains a 100-tree random forest in a Web Worker to compare.
+- **The code writes itself.** A snippet shows the exact `ditify` calls behind
+  what's on screen.
 
-- **Drop in data.** Paste, drop or open a CSV. The delimiter and numeric columns
-  are detected for you, and the tree rebuilds as you edit.
-- **Pick what to predict.** Every text column shows its cross-validated
-  accuracy, so you can see at a glance what the data can and can't tell you.
-- **Ask.** Fill in what you know and the answer updates as you type, with a
-  plain-language reason. The branch it followed lights up in the tree.
-- **Read the model.** See the tree, what matters most, and the rules, ordered
-  by how many rows they cover.
-- **Fast with big tables.** Scoring runs in a Web Worker, and deep branches only
-  render when you open them. A 3,000-row table is ready in about 50 ms.
+No build step, no framework, and nothing leaves your browser. Fonts are
+self-hosted (Inter and JetBrains Mono, SIL Open Font License).
 
 ## Run locally
 

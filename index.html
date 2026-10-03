@@ -3,58 +3,99 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Paste a table, leave a blank, and see the decision tree that answers it.">
-  <title>Decision Tree</title>
+  <title>ditify · decision trees that explain themselves</title>
+  <meta name="description" content="A live playground for ditify: train a decision tree on 1,000 rows in milliseconds, ask it anything, and see exactly why it answered.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>">
+  <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/style.css">
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
-  <main>
-    <header>
-      <h1>Decision Tree</h1>
-      <p>Paste a table. Leave a blank. Ask why.</p>
-    </header>
+  <header class="hero wrap">
+    <nav>
+      <span class="brand">🌳 ditify</span>
+      <a href="https://github.com/nuterian/ditify">GitHub →</a>
+    </nav>
+    <h1>Decision trees that <span class="glow">explain themselves</span>.</h1>
+    <p class="lede">Train on a thousand rows in milliseconds. Get an answer in microseconds, with the reason attached.
+      Pure JavaScript, zero dependencies, running right here in your browser.</p>
+  </header>
 
-    <section class="card" id="data">
-      <div class="chips" id="sets"></div>
-      <textarea id="csv" spellcheck="false" placeholder="Paste or drop a CSV. The first row names the columns."></textarea>
-      <div class="bar">
-        <span id="status" class="status" role="status"></span>
-        <input id="name" placeholder="Name" aria-label="Data set name">
-        <button id="save" type="button">Save</button>
+  <main class="wrap">
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <p class="blurb" id="blurb"></p>
+
+    <section id="custom" class="panel custom" hidden>
+      <textarea id="csv" spellcheck="false" placeholder="Paste a CSV here, or drop a file anywhere on this box. The first row names the columns."></textarea>
+      <div class="custom-bar">
+        <label class="btn">Open file…<input type="file" id="file" accept=".csv,.tsv,.txt,text/csv" hidden></label>
+        <span id="csv-status" class="muted"></span>
       </div>
     </section>
 
-    <div id="model" hidden>
-      <section>
-        <h2>Predict</h2>
-        <div id="picker" class="chips" role="radiogroup" aria-label="Column to predict"></div>
-        <p class="hint">Percentages are cross-validated accuracy at predicting that column from the others.</p>
+    <div id="app">
+      <div class="target-row">
+        <span class="label">Predict</span>
+        <div id="targets" class="chips" role="radiogroup" aria-label="Column to predict"></div>
+      </div>
+
+      <section class="stats" id="stats">
+        <div class="stat" id="st-data"></div>
+        <div class="stat" id="st-train"></div>
+        <div class="stat" id="st-speed"></div>
+        <div class="stat" id="st-acc"></div>
+        <div class="stat" id="st-forest"></div>
       </section>
 
-      <section class="ask">
-        <form id="query" autocomplete="off"></form>
-        <div id="answer" class="card answer" aria-live="polite"></div>
-      </section>
+      <section class="play">
+        <aside class="panel ask">
+          <div class="panel-head">
+            <h2>Ask</h2>
+            <button type="button" class="link" id="reset">Clear</button>
+          </div>
+          <div id="fields" class="fields"></div>
+          <div id="answer" class="answer" aria-live="polite"></div>
+        </aside>
 
-      <section class="split">
-        <div>
-          <h2>Tree</h2>
-          <ul id="tree" class="tree"></ul>
+        <div class="panel viz">
+          <div class="panel-head">
+            <h2>The tree <span class="muted" id="tree-size"></span></h2>
+            <div class="knobs">
+              <label>Depth <output id="depth-out"></output><input type="range" id="depth" min="1" max="12"></label>
+              <label>Min leaf <output id="leaf-out"></output><input type="range" id="leaf" min="1" max="60"></label>
+              <label>Smoothing <output id="shrink-out"></output><input type="range" id="shrink" min="0" max="40"></label>
+            </div>
+          </div>
+          <div class="tree-scroll" id="tree-scroll"><div id="tree"></div></div>
+          <p class="hint">Drag the knobs: it retrains on every move. Click any node to ask about it.</p>
         </div>
-        <aside>
+      </section>
+
+      <section class="below">
+        <div class="panel">
           <h2>What matters</h2>
           <div id="importance" class="bars"></div>
-          <details id="rules-box">
-            <summary>Rules</summary>
-            <ol id="rules" class="rules"></ol>
-          </details>
-        </aside>
+        </div>
+        <div class="panel">
+          <h2>Biggest rules</h2>
+          <ol id="rules" class="rules"></ol>
+        </div>
+        <div class="panel code-panel">
+          <h2>The code for this</h2>
+          <pre id="code"></pre>
+        </div>
       </section>
-    </div>
 
-    <footer>Built with <a href="https://github.com/nuterian/ditify">ditify</a> · Jugal Manjeshwar</footer>
+      <details class="panel peek">
+        <summary>Peek at the data</summary>
+        <div class="table-scroll"><table id="preview"></table></div>
+      </details>
+    </div>
   </main>
+
+  <footer class="wrap">
+    <a href="https://github.com/nuterian/ditify">Get ditify on GitHub</a>
+    <span>One file · about 20 KB · zero dependencies · MIT · by Jugal Manjeshwar</span>
+  </footer>
 </body>
 </html>
