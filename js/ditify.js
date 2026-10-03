@@ -1,4 +1,4 @@
-// Vendored from https://github.com/nuterian/ditify (v2.0.0). Update by copying ditify.js.
+// ditify 1.0.0 — https://github.com/nuterian/ditify
 // ditify: a small, dependency-free decision tree and random forest classifier.
 // Runs in Node (>= 18) and modern browsers as an ES module.
 //
@@ -382,8 +382,8 @@ function predictDist(node, x, K) {
 class Classifier {
   constructor(options = {}, defaults = DEFAULTS) {
     this.options = { ...DEFAULTS, ...defaults, ...stripUndefined(options) }
-    this.attributes = [...(options.attributes ?? options.attribs ?? [])]
-    this._target = options.target ?? options.label
+    this.attributes = [...(options.attributes ?? [])]
+    this._target = options.target
     this.rows = []
     this._models = new Map()
   }
@@ -449,9 +449,7 @@ class Classifier {
 
   toJSON() {
     const options = { ...this.options, attributes: this.attributes, target: this._target }
-    delete options.attribs
-    delete options.label
-    return { ditify: 2, type: this.constructor.name, options, rows: this.rows }
+    return { ditify: 1, type: this.constructor.name, options, rows: this.rows }
   }
 
   static fromJSON(json) {

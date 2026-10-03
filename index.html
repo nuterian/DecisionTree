@@ -3,56 +3,58 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Paste a table, leave a blank, and see the decision tree that answers it.">
   <title>Decision Tree</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>">
   <link rel="stylesheet" href="css/style.css">
+  <script type="module" src="js/main.js"></script>
 </head>
 <body>
   <main>
     <header>
       <h1>Decision Tree</h1>
-      <p class="tagline">Paste a table. Leave a blank. Ask why.</p>
+      <p>Paste a table. Leave a blank. Ask why.</p>
     </header>
 
-    <section>
-      <h2><span class="step">1</span>Data</h2>
-      <div id="sets" class="sets"></div>
-      <textarea id="csv" spellcheck="false" placeholder="outlook,temp,humidity,wind,play&#10;sunny,hot,high,weak,no&#10;..."></textarea>
+    <section class="card" id="data">
+      <div class="chips" id="sets"></div>
+      <textarea id="csv" spellcheck="false" placeholder="Paste or drop a CSV. The first row names the columns."></textarea>
       <div class="bar">
-        <label>Delimiter <input id="delimiter" value="," maxlength="1" class="tiny"></label>
-        <button id="build" class="primary">Build tree</button>
-        <span class="grow"></span>
-        <input id="name" placeholder="Name this data set">
-        <button id="save">Save</button>
+        <span id="status" class="status" role="status"></span>
+        <input id="name" placeholder="Name" aria-label="Data set name">
+        <button id="save" type="button">Save</button>
       </div>
-      <p id="error" class="error" hidden></p>
     </section>
 
-    <section id="model" hidden>
-      <h2><span class="step">2</span>Columns</h2>
-      <p class="hint">How well each column can be predicted from the others (5-fold cross-validation). Click a column to make it the question.</p>
-      <table id="columns"></table>
+    <div id="model" hidden>
+      <section>
+        <h2>Predict</h2>
+        <div id="picker" class="chips" role="radiogroup" aria-label="Column to predict"></div>
+        <p class="hint">Percentages are cross-validated accuracy at predicting that column from the others.</p>
+      </section>
 
-      <h2><span class="step">3</span>Ask about <em id="target-name"></em></h2>
-      <p class="hint">Fill in what you know. Leave anything else blank.</p>
-      <form id="ask" class="ask"></form>
-      <div id="answer" class="answer" hidden></div>
+      <section class="ask">
+        <form id="query" autocomplete="off"></form>
+        <div id="answer" class="card answer" aria-live="polite"></div>
+      </section>
 
-      <h2><span class="step">4</span>The tree</h2>
-      <div class="cols">
-        <div><ul id="tree" class="tree"></ul></div>
+      <section class="split">
+        <div>
+          <h2>Tree</h2>
+          <ul id="tree" class="tree"></ul>
+        </div>
         <aside>
-          <h3>What matters</h3>
-          <div id="importance"></div>
-          <details>
-            <summary>As rules</summary>
+          <h2>What matters</h2>
+          <div id="importance" class="bars"></div>
+          <details id="rules-box">
+            <summary>Rules</summary>
             <ol id="rules" class="rules"></ol>
           </details>
         </aside>
-      </div>
-    </section>
+      </section>
+    </div>
 
-    <footer>Developed by Jugal Manjeshwar · powered by <a href="https://github.com/nuterian/ditify">ditify</a></footer>
+    <footer>Built with <a href="https://github.com/nuterian/ditify">ditify</a> · Jugal Manjeshwar</footer>
   </main>
-  <script type="module" src="js/main.js"></script>
 </body>
 </html>

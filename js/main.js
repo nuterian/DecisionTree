@@ -1,6 +1,9 @@
 import { Ditify } from './ditify.js'
 
 const STORAGE_KEY = 'DTClass.sets'
+const OPEN_DEPTH = 2 // tree levels expanded on first render; deeper levels render when opened
+const MAX_RULES = 100
+
 const EXAMPLE = {
   name: 'Play tennis?',
   raw_train: `outlook,temp,humidity,wind,play
@@ -23,44 +26,292 @@ rain,71,high,strong,no`,
 const $ = (id) => document.getElementById(id)
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const pct = (p) => `${Math.round(p * 100)}%`
-const meter = (p) => `<span class="meter"><i style="width:${(p * 100).toFixed(1)}%"></i></span>`
+const count = (n) => (Math.round(n * 10) / 10).toLocaleString()
+const bar = (name, p) =>
+  `<span title="${esc(name)}">${esc(name)}</span><span class="meter"><i style="width:${(p * 100).toFixed(1)}%"></i></span><span class="pct">${pct(p)}</span>`
 
-let state = null // { attributes, rows, target, model }
+let state = null // { attributes, rows, numeric, target, model, tree, scores }
+let worker = null
 
-// ---------------------------------------------------------------- data
+// ---------------------------------------------------------------- CSV
 
-function parseCSV(text, delimiter) {
-  const rows = [[]]
-  const re = new RegExp(`(\\${delimiter}|\\r?\\n|\\r|^)(?:"([^"]*(?:""[^"]*)*)"|([^"\\${delimiter}\\r\\n]*))`, 'g')
-  let m
-  while ((m = re.exec(text))) {
-    if (m[1].length && m[1] !== delimiter) rows.push([])
-    rows[rows.length - 1].push(m[2] !== undefined ? m[2].replace(/""/g, '"') : m[3])
-    if (m[0].length === 0) re.lastIndex++
-  }
-  return rows.map((r) => r.map((v) => v.trim())).filter((r) => r.some((v) => v !== ''))
+function detectDelimiter(text) {
+  const header = text.split(/\r?\n/, 1)[0]
+  const counts = [',', '\t', ';', '|'].map((d) => [d, header.split(d).length])
+  return counts.sort((a, b) => b[1] - a[1])[0][0]
 }
 
-function toTable(text, delimiter) {
-  const [header, ...body] = parseCSV(text, delimiter || ',')
-  if (!header || body.length === 0) throw new Error('Paste a header row followed by at least one data row.')
-  const width = header.length
-  if (new Set(header).size !== width || header.some((h) => !h)) throw new Error('Every column needs a unique name in the header row.')
+function parseCSV(text, d) {
+  const rows = [[]]
+  const re = new RegExp(`(\\${d}|\\r?\\n|\\r|^)(?:"([^"]*(?:""[^"]*)*)"|([^"\\${d}\\r\\n]*))`, 'g')
+  let m
+  while ((m = re.exec(text))) {
+    if (m[1].length && m[1] !== d) rows.push([])
+    rows[rows.length - 1].push((m[2] !== undefined ? m[2].replace(/""/g, '"') : m[3]).trim())
+    if (m[0].length === 0) re.lastIndex++
+  }
+  return rows.filter((r) => r.some((v) => v !== ''))
+}
+
+function toTable(text) {
+  const [header, ...body] = parseCSV(text, detectDelimiter(text))
+  if (!header || body.length === 0) throw new Error('Add a header row and at least one data row.')
+  if (new Set(header).size !== header.length || header.some((h) => !h)) throw new Error('Every column needs a unique name.')
   const rows = body.map((r, i) => {
-    if (r.length > width) throw new Error(`Row ${i + 2} has ${r.length} values but the header has ${width}.`)
+    if (r.length > header.length) throw new Error(`Row ${i + 2} has ${r.length} values; the header has ${header.length}.`)
     return header.map((_, j) => r[j] ?? '')
   })
   // Columns where every non-blank value is a number become numeric.
+  const numeric = new Set()
   header.forEach((_, j) => {
     const vals = rows.map((r) => r[j]).filter((v) => v !== '')
     if (vals.length && vals.every((v) => Number.isFinite(Number(v)))) {
-      rows.forEach((r) => (r[j] = r[j] === '' ? null : Number(r[j])))
+      numeric.add(j)
+      for (const r of rows) r[j] = r[j] === '' ? null : Number(r[j])
     }
   })
-  return { attributes: header, rows }
+  return { attributes: header, rows, numeric }
 }
 
-// ---------------------------------------------------------------- saved sets
+// ---------------------------------------------------------------- build
+
+function setStatus(text, error = false) {
+  $('status').textContent = text
+  $('status').classList.toggle('error', error)
+}
+
+function build() {
+  const text = $('csv').value
+  if (!text.trim()) {
+    state = null
+    $('model').hidden = true
+    setStatus('')
+    return
+  }
+  try {
+    const { attributes, rows, numeric } = toTable(text)
+    const categorical = attributes.filter((_, j) => !numeric.has(j))
+    if (!categorical.length) throw new Error('Every column is numeric. Add a text column to predict.')
+    const same = state?.attributes.join('\u0000') === attributes.join('\u0000')
+    const target = same && categorical.includes(state.target) ? state.target : categorical.at(-1)
+    const query = same ? readQuery() : {}
+    state = { attributes, rows, numeric, scores: new Map() }
+    const t0 = performance.now()
+    selectTarget(target, query)
+    setStatus(`${rows.length.toLocaleString()} rows · ${attributes.length} columns · ${Math.max(1, Math.round(performance.now() - t0))} ms`)
+    $('model').hidden = false
+    scoreColumns(categorical)
+  } catch (err) {
+    setStatus(err.message, true)
+  }
+}
+
+let buildTimer
+const buildSoon = () => {
+  clearTimeout(buildTimer)
+  buildTimer = setTimeout(build, 300)
+}
+
+function selectTarget(target, query = readQuery()) {
+  state.target = target
+  state.model = new Ditify({ attributes: state.attributes, target }).train(state.rows)
+  state.tree = state.model.tree()
+  renderPicker()
+  renderQuery(query)
+  renderTree()
+  renderImportance()
+  resetRules()
+  answer()
+}
+
+// Cross-validation runs in a worker so large tables never freeze the page.
+function scoreColumns(columns) {
+  worker?.terminate()
+  worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' })
+  worker.onmessage = ({ data }) => {
+    state.scores.set(data.target, data)
+    renderScore(data.target)
+  }
+  worker.postMessage({ attributes: state.attributes, rows: state.rows, columns })
+}
+
+// ---------------------------------------------------------------- predict picker
+
+function renderPicker() {
+  $('picker').innerHTML = state.attributes
+    .filter((_, j) => !state.numeric.has(j))
+    .map(
+      (a) => `<button type="button" class="chip" role="radio" data-col="${esc(a)}" aria-checked="${a === state.target}">
+        ${esc(a)} <span class="score">…</span></button>`
+    )
+    .join('')
+  for (const a of state.scores.keys()) renderScore(a)
+}
+
+function renderScore(target) {
+  const el = [...$('picker').children].find((b) => b.dataset.col === target)?.querySelector('.score')
+  const s = state.scores.get(target)
+  if (!el || !s) return
+  if (s.accuracy === null) {
+    el.textContent = '–'
+    el.title = 'Too few rows to score'
+    return
+  }
+  el.textContent = pct(s.accuracy)
+  el.title = `Cross-validated accuracy ${pct(s.accuracy)}; always guessing the most common value gets ${pct(s.baseline)}`
+  el.classList.toggle('good', s.accuracy > s.baseline + 0.05)
+}
+
+$('picker').addEventListener('click', (e) => {
+  const col = e.target.closest('[data-col]')?.dataset.col
+  if (col && col !== state.target) selectTarget(col)
+})
+
+// ---------------------------------------------------------------- ask
+
+function renderQuery(query) {
+  $('query').innerHTML = state.attributes
+    .map((a, j) => {
+      if (a === state.target) return ''
+      const value = esc(query[a] ?? '')
+      if (state.numeric.has(j)) return `<label>${esc(a)}<input name="${esc(a)}" type="number" step="any" value="${value}" placeholder="any"></label>`
+      const options = [...new Set(state.rows.map((r) => r[j]).filter((v) => v !== ''))].slice(0, 200)
+      return `<label>${esc(a)}<input name="${esc(a)}" list="dl-${j}" value="${value}" placeholder="any">
+        <datalist id="dl-${j}">${options.map((v) => `<option value="${esc(v)}">`).join('')}</datalist></label>`
+    })
+    .join('')
+}
+
+function readQuery() {
+  const query = {}
+  for (const input of $('query').querySelectorAll('input')) {
+    const v = input.value.trim()
+    query[input.name] = v === '' ? null : input.type === 'number' ? Number(v) : v
+  }
+  return query
+}
+
+function answer() {
+  const query = readQuery()
+  const r = state.model.explain(query, { target: state.target })
+  const blank = Object.values(query).every((v) => v === null)
+  const known = r.path.filter((s) => !s.test.startsWith('unknown'))
+  const unknown = r.path.find((s) => s.test.startsWith('unknown'))
+  let why = known.length ? `because <b>${esc(known.map((s) => `${s.attribute} ${s.test}`).join(' and '))}</b>` : ''
+  if (unknown) why += `${why ? ', then ' : ''}averaged over every <b>${esc(unknown.attribute)}</b> branch, since it's blank`
+  if (blank) why = 'Fill in what you know to narrow it down.'
+  else if (!why) why = 'No split applies, so this is the overall mix.'
+  const probs = Object.entries(r.probabilities).sort((a, b) => b[1] - a[1]).slice(0, 6)
+  $('answer').innerHTML = `
+    <div class="label">${esc(r.label)} <span class="chance">${pct(r.chance)}</span></div>
+    <div class="why">${why}</div>
+    <div class="bars">${probs.map(([k, p]) => bar(k, p)).join('')}</div>`
+  highlight(blank ? [] : r.path)
+}
+
+let answerFrame = 0
+$('query').addEventListener('input', () => {
+  cancelAnimationFrame(answerFrame)
+  answerFrame = requestAnimationFrame(answer)
+})
+$('query').addEventListener('submit', (e) => e.preventDefault())
+
+// ---------------------------------------------------------------- tree
+
+function nodeAt(key) {
+  return key.split('.').slice(1).reduce((node, i) => node.children[+i].node, state.tree)
+}
+
+function nodeHTML(node, test, key, depth) {
+  const head = `<span class="test">${esc(test)}</span><span class="pred">${esc(node.label)}</span>
+    <span class="meta">${pct(node.chance)} · ${count(node.samples)}</span>`
+  if (!node.children) return `<li data-key="${key}"><div class="leaf">${head}</div></li>`
+  const open = depth < OPEN_DEPTH
+  return `<li data-key="${key}"><details${open ? ' open' : ''}><summary>${head}</summary><ul>${open ? childrenHTML(node, key, depth) : ''}</ul></details></li>`
+}
+
+function childrenHTML(node, key, depth) {
+  return node.children.map((c, i) => nodeHTML(c.node, `${node.attribute} ${c.test}`, `${key}.${i}`, depth + 1)).join('')
+}
+
+// Fill a collapsed branch the first time it opens.
+function ensureChildren(li) {
+  const ul = li.querySelector(':scope > details > ul')
+  if (ul && !ul.childElementCount) {
+    const key = li.dataset.key
+    ul.innerHTML = childrenHTML(nodeAt(key), key, key.split('.').length - 1)
+  }
+}
+
+function renderTree() {
+  $('tree').innerHTML = nodeHTML(state.tree, 'all rows', 'r', 0)
+}
+
+$('tree').addEventListener('toggle', (e) => e.target.open && ensureChildren(e.target.parentElement), true)
+
+// Light up (and open) the branch the current answer followed.
+function highlight(path) {
+  for (const el of $('tree').querySelectorAll('.on')) el.classList.remove('on')
+  if (!path.length) return
+  let node = state.tree
+  let key = 'r'
+  const keys = [key]
+  for (const step of path) {
+    const i = node.children?.findIndex((c) => node.attribute === step.attribute && c.test === step.test) ?? -1
+    if (i < 0) break
+    node = node.children[i].node
+    key += `.${i}`
+    keys.push(key)
+  }
+  for (const k of keys) {
+    const li = $('tree').querySelector(`li[data-key="${k}"]`)
+    if (!li) break
+    li.classList.add('on')
+    const details = li.querySelector(':scope > details')
+    if (details && k !== keys.at(-1)) {
+      ensureChildren(li)
+      details.open = true
+    }
+  }
+}
+
+// ---------------------------------------------------------------- side panel
+
+function renderImportance() {
+  const imp = Object.entries(state.model.importance())
+    .filter(([, p]) => p > 0.005)
+    .sort((a, b) => b[1] - a[1])
+  $('importance').innerHTML = imp.length ? imp.map(([a, p]) => bar(a, p)).join('') : '<span class="hint">Nothing yet</span>'
+}
+
+function resetRules() {
+  $('rules').innerHTML = ''
+  if ($('rules-box').open) renderRules()
+}
+
+function renderRules() {
+  if ($('rules').childElementCount) return
+  const leaves = []
+  const walk = (node, conds) => {
+    if (!node.children) leaves.push({ ...node, conds })
+    else for (const c of node.children) walk(c.node, [...conds, `${node.attribute} ${c.test}`])
+  }
+  walk(state.tree, [])
+  leaves.sort((a, b) => b.samples - a.samples)
+  const more = leaves.length - MAX_RULES
+  $('rules').innerHTML =
+    leaves
+      .slice(0, MAX_RULES)
+      .map(
+        (l) => `<li><span class="if">${esc(l.conds.join(' and ') || 'always')}</span> → <b>${esc(l.label)}</b>
+          <span class="hint">${pct(l.chance)} · ${count(l.samples)}</span></li>`
+      )
+      .join('') + (more > 0 ? `<li class="hint">…and ${more.toLocaleString()} smaller rules</li>` : '')
+}
+
+$('rules-box').addEventListener('toggle', () => $('rules-box').open && renderRules())
+
+// ---------------------------------------------------------------- data sets
 
 function loadSets() {
   try {
@@ -70,176 +321,76 @@ function loadSets() {
   }
 }
 
+function storeSets(sets) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sets))
+  } catch {
+    setStatus('Could not save: browser storage is unavailable.', true)
+  }
+  renderSets()
+}
+
 function renderSets() {
-  const sets = loadSets()
   $('sets').innerHTML =
-    sets.map((s, i) => `<button data-set="${i}">${esc(s.name || 'Untitled')}</button>`).join('') +
-    `<button class="example" data-set="example">Example: ${esc(EXAMPLE.name)}</button>`
+    loadSets()
+      .map(
+        (s, i) => `<span class="chip"><button type="button" class="x-load" data-set="${i}">${esc(s.name || 'Untitled')}</button>
+          <button type="button" class="x" data-del="${i}" aria-label="Delete ${esc(s.name)}">×</button></span>`
+      )
+      .join('') +
+    `<button type="button" class="chip ghost" data-set="example">${esc(EXAMPLE.name)}</button>
+     <label class="chip ghost">Open CSV…<input type="file" id="file" accept=".csv,.tsv,.txt,text/csv"></label>`
+}
+
+function loadText(text, name = '') {
+  $('csv').value = text
+  $('name').value = name
+  build()
 }
 
 $('sets').addEventListener('click', (e) => {
-  const id = e.target.dataset?.set
-  if (id === undefined) return
-  const set = id === 'example' ? EXAMPLE : loadSets()[id]
-  $('csv').value = set.raw_train
-  $('name').value = id === 'example' ? '' : set.name
-  build()
+  const del = e.target.closest('[data-del]')?.dataset.del
+  if (del !== undefined) {
+    const sets = loadSets()
+    if (confirm(`Delete "${sets[del].name}"?`)) storeSets(sets.filter((_, i) => i !== +del))
+    return
+  }
+  const id = e.target.closest('[data-set]')?.dataset.set
+  if (id === 'example') loadText(EXAMPLE.raw_train)
+  else if (id !== undefined) loadText(loadSets()[id].raw_train, loadSets()[id].name)
+})
+
+$('sets').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0]
+  if (file) loadText(await file.text(), file.name.replace(/\.\w+$/, ''))
+  e.target.value = ''
 })
 
 $('save').addEventListener('click', () => {
   const name = $('name').value.trim() || 'Untitled'
-  const sets = loadSets().filter((s) => s.name !== name)
+  $('name').value = name
   const d = new Date()
-  sets.push({ name, raw_train: $('csv').value, modified: `${d.toLocaleDateString()} ${d.toLocaleTimeString()}` })
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sets))
-  } catch {
-    showError('Could not save: browser storage is unavailable.')
-  }
-  renderSets()
+  const set = { name, raw_train: $('csv').value, modified: `${d.toLocaleDateString()} ${d.toLocaleTimeString()}` }
+  storeSets([...loadSets().filter((s) => s.name !== name), set])
 })
 
-// ---------------------------------------------------------------- model
-
-function showError(msg) {
-  $('error').textContent = msg
-  $('error').hidden = !msg
-}
-
-const isNumericColumn = (j) => state.rows.some((r) => typeof r[j] === 'number')
-
-function build() {
-  showError('')
-  try {
-    const { attributes, rows } = toTable($('csv').value, $('delimiter').value)
-    const keep = state?.attributes.join('\u0000') === attributes.join('\u0000') ? state.target : null
-    state = { attributes, rows }
-    // Default question: the last categorical column.
-    const target = keep ?? [...attributes].reverse().find((_, i) => !isNumericColumn(attributes.length - 1 - i))
-    if (!target) throw new Error('Every column is numeric. ditify predicts categories, so add at least one text column.')
-    renderColumns()
-    selectTarget(target)
-    $('model').hidden = false
-  } catch (err) {
-    showError(err.message)
-    $('model').hidden = true
-  }
-}
-
-$('build').addEventListener('click', build)
-
-// k-fold cross-validated accuracy for predicting `target`, plus the majority baseline.
-function predictability(target) {
-  const { attributes, rows } = state
-  const t = attributes.indexOf(target)
-  const labelled = rows.filter((r) => r[t] !== '' && r[t] !== null).slice(0, 2000) // keep the table instant
-  const n = labelled.length
-  if (n < 4) return null
-  const counts = {}
-  for (const r of labelled) counts[r[t]] = (counts[r[t]] || 0) + 1
-  const baseline = Math.max(...Object.values(counts)) / n
-  const k = Math.min(5, n)
-  let correct = 0
-  for (let f = 0; f < k; f++) {
-    const train = labelled.filter((_, i) => i % k !== f)
-    const test = labelled.filter((_, i) => i % k === f)
-    const r = new Ditify({ attributes, target }).train(train).evaluate(test)
-    correct += r.accuracy * r.n
-  }
-  return { accuracy: correct / n, baseline }
-}
-
-function renderColumns() {
-  const body = state.attributes
-    .map((a, j) => {
-      const numeric = isNumericColumn(j)
-      const p = numeric ? null : predictability(a)
-      const cell = p
-        ? `${meter(p.accuracy)}${pct(p.accuracy)} <span class="muted" title="Accuracy of always guessing the most common value">vs ${pct(p.baseline)} baseline</span>`
-        : `<span class="muted">${numeric ? 'numeric, used as an input only' : 'too few rows'}</span>`
-      return `<tr data-col="${esc(a)}"><td>${esc(a)}</td><td class="num">${cell}</td></tr>`
-    })
-    .join('')
-  $('columns').innerHTML = `<thead><tr><th>Column</th><th>Predictability</th></tr></thead><tbody>${body}</tbody>`
-}
-
-$('columns').addEventListener('click', (e) => {
-  const row = e.target.closest('tr[data-col]')
-  if (row && !isNumericColumn(state.attributes.indexOf(row.dataset.col))) selectTarget(row.dataset.col)
-})
-
-function selectTarget(target) {
-  state.target = target
-  state.model = new Ditify({ attributes: state.attributes, target }).train(state.rows)
-  for (const tr of $('columns').querySelectorAll('tr[data-col]')) tr.classList.toggle('selected', tr.dataset.col === target)
-  $('target-name').textContent = target
-  renderAskForm()
-  $('answer').hidden = true
-  renderTree([])
-  renderImportance()
-  $('rules').innerHTML = state.model.rules().map((r) => `<li>${esc(r)}</li>`).join('')
-}
-
-// ---------------------------------------------------------------- ask
-
-function renderAskForm() {
-  const { attributes, rows, target } = state
-  $('ask').innerHTML =
-    attributes
-      .map((a, j) => {
-        if (a === target) return ''
-        if (isNumericColumn(j)) return `<label>${esc(a)}<input name="${esc(a)}" type="number" step="any"></label>`
-        const values = [...new Set(rows.map((r) => r[j]).filter((v) => v !== ''))].slice(0, 200)
-        return `<label>${esc(a)}<input name="${esc(a)}" list="dl-${j}" autocomplete="off">
-          <datalist id="dl-${j}">${values.map((v) => `<option value="${esc(v)}">`).join('')}</datalist></label>`
-      })
-      .join('') + `<button class="primary">Ask</button>`
-}
-
-$('ask').addEventListener('submit', (e) => {
+// Drag a CSV anywhere onto the data card.
+const card = $('data')
+card.addEventListener('dragover', (e) => {
   e.preventDefault()
-  const query = {}
-  state.attributes.forEach((a, j) => {
-    if (a === state.target) return
-    const v = e.target.elements[a].value.trim()
-    query[a] = v === '' ? null : isNumericColumn(j) ? Number(v) : v
-  })
-  const r = state.model.explain(query, { target: state.target })
-  const probs = Object.entries(r.probabilities).sort((a, b) => b[1] - a[1])
-  $('answer').innerHTML = `
-    <div class="big">${esc(state.target)}: ${esc(r.label)} <span class="muted">${pct(r.chance)}</span></div>
-    <div class="because">${r.because ? `because <b>${esc(r.because)}</b>` : 'the tree has no splits, so this is simply the most common value'}</div>
-    <div class="probs">${probs.map(([k, p]) => `<span>${esc(k)}</span><span>${meter(p)}${pct(p)}</span>`).join('')}</div>`
-  $('answer').hidden = false
-  renderTree(r.path)
+  card.classList.add('drop')
+})
+card.addEventListener('dragleave', () => card.classList.remove('drop'))
+card.addEventListener('drop', async (e) => {
+  e.preventDefault()
+  card.classList.remove('drop')
+  const file = e.dataTransfer.files[0]
+  if (file) loadText(await file.text(), file.name.replace(/\.\w+$/, ''))
 })
 
-// ---------------------------------------------------------------- tree
-
-// Renders the fitted tree as nested <details>, highlighting the path `explain()` took.
-function renderTree(path) {
-  const label = (node) =>
-    `<span class="pred">${esc(node.label)}</span> <span class="muted">${pct(node.chance)} · n=${Math.round(node.samples * 10) / 10}</span>`
-  const render = (node, test, depth, onPath) => {
-    const on = onPath ? ' on' : ''
-    const head = test ? `<span class="test">${esc(test)}</span> → ` : ''
-    if (!node.children) return `<li><span class="leaf${on}">${head}${label(node)}</span></li>`
-    const step = onPath ? path[depth] : null
-    const kids = node.children
-      .map((c) => render(c.node, `${node.attribute} ${c.test}`, depth + 1, !!step && step.attribute === node.attribute && step.test === c.test))
-      .join('')
-    return `<li><details open class="${on}"><summary>${head}${label(node)} <span class="split">· split on ${esc(node.attribute)}</span></summary><ul>${kids}</ul></details></li>`
-  }
-  $('tree').innerHTML = render(state.model.tree(), '', 0, path.length > 0)
-}
-
-function renderImportance() {
-  const imp = Object.entries(state.model.importance()).sort((a, b) => b[1] - a[1])
-  $('importance').innerHTML = `<div class="probs">${imp.map(([a, p]) => `<span>${esc(a)}</span><span>${meter(p)}${pct(p)}</span>`).join('')}</div>`
-}
+$('csv').addEventListener('input', buildSoon)
 
 // ---------------------------------------------------------------- start
 
 renderSets()
-$('csv').value = loadSets().length ? '' : EXAMPLE.raw_train
-if ($('csv').value) build()
+if (!loadSets().length) loadText(EXAMPLE.raw_train)
