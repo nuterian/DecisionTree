@@ -11,19 +11,23 @@
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
-  <header class="hero wrap">
-    <nav>
-      <span class="brand">🌳 ditify</span>
-      <a href="https://github.com/nuterian/ditify">GitHub →</a>
-    </nav>
-    <h1>Decision trees that <span class="glow">explain themselves</span>.</h1>
-    <p class="lede">Train on a thousand rows in milliseconds. Get an answer in microseconds, with the reason attached.
-      Pure JavaScript, zero dependencies, running right here in your browser.</p>
+  <header class="wrap top">
+    <div class="hero">
+      <div>
+        <div class="brand">🌳 ditify</div>
+        <h1>Decision trees that <span class="glow">explain themselves</span>.</h1>
+      </div>
+      <p class="lede">Train on a thousand rows in milliseconds and get answers in microseconds, each with its reason.
+        Pure JavaScript, zero dependencies, running in your browser.
+        <a href="https://github.com/nuterian/ditify">GitHub →</a></p>
+    </div>
   </header>
 
   <main class="wrap">
-    <div class="tabs" id="tabs" role="tablist"></div>
-    <p class="blurb" id="blurb"></p>
+    <div class="bar">
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <p class="blurb" id="blurb"></p>
+    </div>
 
     <section id="custom" class="panel custom" hidden>
       <textarea id="csv" spellcheck="false" placeholder="Paste a CSV here, or drop a file anywhere on this box. The first row names the columns."></textarea>
@@ -34,11 +38,6 @@
     </section>
 
     <div id="app">
-      <div class="target-row">
-        <span class="label">Predict</span>
-        <div id="targets" class="chips" role="radiogroup" aria-label="Column to predict"></div>
-      </div>
-
       <section class="stats" id="stats">
         <div class="stat" id="st-data"></div>
         <div class="stat" id="st-train"></div>
@@ -49,12 +48,16 @@
 
       <section class="play">
         <aside class="panel ask">
+          <div class="target-row">
+            <span class="label">Predict</span>
+            <div id="targets" class="chips" role="radiogroup" aria-label="Column to predict"></div>
+          </div>
+          <div id="answer" class="answer" aria-live="polite"></div>
           <div class="panel-head">
             <h2>Ask</h2>
             <button type="button" class="link" id="reset">Clear</button>
           </div>
           <div id="fields" class="fields"></div>
-          <div id="answer" class="answer" aria-live="polite"></div>
         </aside>
 
         <div class="panel viz">
@@ -67,7 +70,7 @@
             </div>
           </div>
           <div class="tree-scroll" id="tree-scroll"><div id="tree"></div></div>
-          <p class="hint">Drag the knobs: it retrains on every move. Click any node to ask about it.</p>
+          <p class="hint">Drag a knob and it retrains on every move. Click any node to ask about it.</p>
         </div>
       </section>
 
@@ -94,8 +97,8 @@
   </main>
 
   <footer class="wrap">
-    <a href="https://github.com/nuterian/ditify">Get ditify on GitHub</a>
     <span>One file · about 20 KB · zero dependencies · MIT · by Jugal Manjeshwar</span>
+    <a href="https://github.com/nuterian/ditify">Get ditify on GitHub</a>
   </footer>
 </body>
 </html>

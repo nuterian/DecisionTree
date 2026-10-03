@@ -267,6 +267,10 @@ function retrain(fresh = false) {
     resetForest()
   }
 
+  if (fresh) {
+    $('tree-scroll').scrollTop = 0
+    $('tree-scroll').scrollLeft = 0
+  }
   drawTree()
   renderImportance()
   renderRules()
@@ -389,22 +393,23 @@ for (const [id, k] of Object.entries(knobs)) {
 
 // ---------------------------------------------------------------- ask
 
+// One row per field: name on the left, control on the right.
 function fieldHTML(c) {
   const v = S.query[c.name]
   const unset = blank(v)
-  const head = (extra = '') => `<div class="field-head"><span class="name">${esc(c.name)}</span>${extra}</div>`
+  const name = `<span class="name" title="${esc(c.name)}">${esc(c.name)}</span>`
   if (c.numeric) {
     const value = unset ? (c.min + c.max) / 2 : v
-    return `<div class="field${unset ? ' unset' : ''}" data-attr="${esc(c.name)}">
-      ${head(`<output>${unset ? 'any' : fmtNum(v)}</output><button type="button" class="x" title="Clear"${unset ? ' hidden' : ''}>×</button>`)}
-      <input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${value}" aria-label="${esc(c.name)}"></div>`
+    return `<div class="field num${unset ? ' unset' : ''}" data-attr="${esc(c.name)}">${name}<div class="ctl">
+      <input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${value}" aria-label="${esc(c.name)}">
+      <output>${unset ? 'any' : fmtNum(v)}</output><button type="button" class="x" title="Clear"${unset ? ' hidden' : ''}>×</button></div></div>`
   }
-  if (c.values.length <= 4 && c.values.every((x) => x.length <= 12)) {
+  if (c.values.length <= 4 && c.values.join('').length <= 16) {
     const btn = (val, label) => `<button type="button" data-value="${esc(val)}" aria-pressed="${(unset ? '' : String(v)) === val}">${esc(label)}</button>`
-    return `<div class="field" data-attr="${esc(c.name)}">${head()}<div class="seg">${btn('', 'any')}${c.values.map((x) => btn(x, x)).join('')}</div></div>`
+    return `<div class="field" data-attr="${esc(c.name)}">${name}<div class="seg">${btn('', 'any')}${c.values.map((x) => btn(x, x)).join('')}</div></div>`
   }
   const opt = (val, label) => `<option value="${esc(val)}"${(unset ? '' : String(v)) === val ? ' selected' : ''}>${esc(label)}</option>`
-  return `<div class="field" data-attr="${esc(c.name)}">${head()}<select aria-label="${esc(c.name)}">${opt('', 'any')}${c.values
+  return `<div class="field" data-attr="${esc(c.name)}">${name}<select aria-label="${esc(c.name)}">${opt('', 'any')}${c.values
     .slice(0, 500)
     .map((x) => opt(x, x))
     .join('')}</select></div>`
@@ -619,22 +624,26 @@ function highlight(path, active) {
     keys.push(key)
   }
   for (const k of keys) for (const el of svg.querySelectorAll(`[data-key="${k}"]`)) el.classList.add('on')
-  reveal(S.nodes.get(keys[keys.length - 1]))
+  reveal(keys.slice(1).map((k) => S.nodes.get(k)).filter(Boolean))
 }
 
-function reveal(n) {
-  if (!n) return
+// Scroll the least needed to show the whole path; if it can't fit, favour the leaf end.
+function reveal(nodes) {
+  if (!nodes.length) return
   const box = $('tree-scroll')
-  const left = n.x + 18 // container padding
-  const top = n.y
-  const margin = 24
-  const next = { left: box.scrollLeft, top: box.scrollTop }
-  // Scroll only as far as needed, so the root keeps as much context as possible.
-  if (left + W + margin > box.scrollLeft + box.clientWidth) next.left = left + W + margin - box.clientWidth
-  else if (left - margin < box.scrollLeft) next.left = left - margin
-  if (top + H + margin > box.scrollTop + box.clientHeight) next.top = top + H + margin - box.clientHeight
-  else if (top - margin < box.scrollTop) next.top = top - margin
-  if (next.left !== box.scrollLeft || next.top !== box.scrollTop) box.scrollTo({ ...next, behavior: 'smooth' })
+  const pad = 16 // container padding
+  const margin = 20
+  const fit = (lo, hi, start, size) => {
+    if (hi - lo + 2 * margin > size) return hi + margin - size // too big: keep the far end
+    if (lo - margin < start) return lo - margin
+    if (hi + margin > start + size) return hi + margin - size
+    return start
+  }
+  const xs = nodes.map((n) => n.x + pad)
+  const ys = nodes.map((n) => n.y)
+  const left = fit(Math.min(...xs), Math.max(...xs) + W, box.scrollLeft, box.clientWidth)
+  const top = fit(Math.min(...ys), Math.max(...ys) + H, box.scrollTop, box.clientHeight)
+  if (left !== box.scrollLeft || top !== box.scrollTop) box.scrollTo({ left, top, behavior: 'smooth' })
 }
 
 // Clicking a node fills in the answers that lead there.
@@ -693,7 +702,7 @@ function renderRules() {
   walk(S.tree, [])
   leaves.sort((a, b) => b.node.samples - a.node.samples)
   $('rules').innerHTML = leaves
-    .slice(0, 6)
+    .slice(0, 4)
     .map(({ node, steps }) => {
       const { conds } = describe(steps)
       return `<li><span class="if">${esc(conds.join(' and ') || 'always')}</span>
