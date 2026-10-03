@@ -1,74 +1,58 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-	<title></title>
-	<link href="css/bootstrap.min.css" rel="stylesheet" media="screen">
-	<link rel="stylesheet" type="text/css" href="css/style.css">
-	
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Decision Tree</title>
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-	<div class="wrapper">
-		<h2 class="title">Decision Tree Classifier</h2>
+  <main>
+    <header>
+      <h1>Decision Tree</h1>
+      <p class="tagline">Paste a table. Leave a blank. Ask why.</p>
+    </header>
 
-		<h3><span class="number">1</span>Select a Training Set</h3>
-		<table class="table table-bordered" id="trainingDataTable">
-			<thead>
-				<tr>
-					<th>Name</th>
-					<th>Last Modified</th>
-					<th class="actions"><button class="btn btn-success" id="createButton">Create New</button></th>
-				</tr>
-			</thead>
+    <section>
+      <h2><span class="step">1</span>Data</h2>
+      <div id="sets" class="sets"></div>
+      <textarea id="csv" spellcheck="false" placeholder="outlook,temp,humidity,wind,play&#10;sunny,hot,high,weak,no&#10;..."></textarea>
+      <div class="bar">
+        <label>Delimiter <input id="delimiter" value="," maxlength="1" class="tiny"></label>
+        <button id="build" class="primary">Build tree</button>
+        <span class="grow"></span>
+        <input id="name" placeholder="Name this data set">
+        <button id="save">Save</button>
+      </div>
+      <p id="error" class="error" hidden></p>
+    </section>
 
-			<tbody>
+    <section id="model" hidden>
+      <h2><span class="step">2</span>Columns</h2>
+      <p class="hint">How well each column can be predicted from the others (5-fold cross-validation). Click a column to make it the question.</p>
+      <table id="columns"></table>
 
-			</tbody>
-		</table>
+      <h2><span class="step">3</span>Ask about <em id="target-name"></em></h2>
+      <p class="hint">Fill in what you know. Leave anything else blank.</p>
+      <form id="ask" class="ask"></form>
+      <div id="answer" class="answer" hidden></div>
 
-		<div id="trainDataContainer" data="">
-			<h3><span class="number">2</span>Add Training Data</h3>
-			<textarea id="trainInput"></textarea>
-			<div class="clearfix">
-				<div class="pull-left">
-					<div class="input-append">
-						<input style="width:20px" type="text" value="," id="parseDelInput">
-						<button class="btn btn-primary" type="button" id="parseButton">Parse & Generate</button>
-					</div>
-				</div>
-				<div class="input-append pull-right">
-					<input class="span3" type="text" placeholder="Name for Train Data" id="trainNameInput">
-					<button class="btn btn-warning" type="button" id="saveButton">Save</button>
-				</div>			
-			</div>
-		</div>
+      <h2><span class="step">4</span>The tree</h2>
+      <div class="cols">
+        <div><ul id="tree" class="tree"></ul></div>
+        <aside>
+          <h3>What matters</h3>
+          <div id="importance"></div>
+          <details>
+            <summary>As rules</summary>
+            <ol id="rules" class="rules"></ol>
+          </details>
+        </aside>
+      </div>
+    </section>
 
-		<div id="treeEntropyContainer">
-			<h4>Class-wise efficiency of Generated Trees</h4>
-			<table class="table table-bordered" id="treeEntropyTable">
-				
-			</table>
-		</div>
-
-		<div id="testInputContainer">
-			<h3><span class="number">3</span>Test</h3>
-			<input type="text" id="testInput" placeholder="Enter Test Data"/>
-			<div class="clearfix">
-				<div class="pull-left">
-					<input type="button" class="btn btn-primary" value="Predict Class" id="testButton"/>
-				</div>
-				<div class="pull-right" id="testResult">
-					
-				</div>
-			</div>	
-		</div>
-
-		<div class="footer">
-			Developed by Jugal Manjeshwar
-		</div>
-
-	</div>	
-
-	<script type="text/javascript" src="js/jquery-2.0.3.min.js"></script>
-	<script type="text/javascript" src="js/main.js"></script>
+    <footer>Developed by Jugal Manjeshwar · powered by <a href="https://github.com/nuterian/ditify">ditify</a></footer>
+  </main>
+  <script type="module" src="js/main.js"></script>
 </body>
-</html
+</html>
