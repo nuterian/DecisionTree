@@ -1,31 +1,32 @@
-# Decision Tree
+# ditify playground
 
-**Paste a table. Leave a blank. Ask why.**
+**Decision trees that explain themselves.** A live demo of
+[ditify](https://github.com/nuterian/ditify): train on 1,000 rows in
+milliseconds, ask anything, and see exactly why it answered.
 
-A no-build web app for exploring decision trees, powered by
-[ditify](https://github.com/nuterian/ditify).
+**▶ http://nuterian.github.io/DecisionTree**
 
-Demo: http://nuterian.github.io/DecisionTree
+- **Three ready-made datasets:** customer churn (1,000 rows), loan decisions
+  (1,000 rows, three outcomes) and the classic play-tennis set. You can also
+  paste or drop your own CSV.
+- **A tree you can see.** The answer's path lights up, edges are as thick as the
+  rows that flow through them, and clicking any node asks about it.
+- **Live knobs.** Depth, minimum leaf size and smoothing retrain the model on
+  every move, and held-out accuracy updates as you drag.
+- **Real numbers.** Training time, per-answer latency (well under a
+  microsecond), and honest accuracy on rows the model never saw. One click
+  trains a 100-tree random forest in a Web Worker to compare.
+- **The code writes itself.** A snippet shows the exact `ditify` calls behind
+  what's on screen.
 
-- **Paste any CSV.** Columns that are all numbers are detected automatically and
-  split on thresholds.
-- **See which columns are predictable.** Each column gets a 5-fold
-  cross-validated accuracy against a "guess the most common value" baseline.
-  Click one to make it the question.
-- **Ask.** Fill in what you know and leave the rest blank. You get an answer, a
-  confidence, and the reason ("because outlook = sunny AND humidity = high"),
-  with that path lit up in the tree.
-- **Read the model.** The collapsible tree, IF/THEN rules, and column
-  importance are all on the page.
-- **Data stays in your browser.** Saved data sets live in `localStorage`.
+No build step, no framework, and nothing leaves your browser. Fonts are
+self-hosted (Inter and JetBrains Mono, SIL Open Font License).
 
 ## Run locally
-
-It's a plain static site, but ES modules need to be served over HTTP:
 
 ```sh
 python3 -m http.server   # then open http://localhost:8000
 ```
 
-`js/ditify.js` is a vendored copy of the library. To upgrade, copy the latest
+`js/ditify.js` is a copy of the library. To upgrade, copy the latest
 `ditify.js` over it.
