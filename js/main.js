@@ -1,12 +1,15 @@
 import { Ditify } from './ditify.js'
 import { DATASETS } from './datasets.js'
 
-const PALETTE = ['#14b8a6', '#f43f5e', '#f59e0b', '#6366f1', '#84cc16', '#d946ef', '#0ea5e9', '#f97316']
-const W = 248 // node width
-const H = 30 // node height
-const COL = 290 // horizontal distance between depths
-const ROW = 40 // vertical distance between leaves
-const PAD = 4
+const LIGHT = ['#2f6b4f', '#c58a2d', '#b4563c', '#4b6b8a', '#3b8a84', '#8a7a2b', '#b85c74', '#5c6560']
+const DARK = ['#7fb79a', '#e0a84f', '#e08366', '#86a7c7', '#6fbfb8', '#c9b65a', '#e2869c', '#a3aba5']
+const darkMode = matchMedia('(prefers-color-scheme: dark)')
+const PALETTE = () => (darkMode.matches ? DARK : LIGHT)
+const W = 232 // node width
+const H = 36 // node height
+const COL = 276 // horizontal distance between depths
+const ROW = 44 // vertical distance between leaves
+const PAD = 6
 const MAX_NODES = 1500 // beyond this a drawing stops being readable
 const DEPTH_UNLIMITED = 12 // depth slider position meaning "no limit"
 const CUSTOM_KEY = 'ditify-demo.csv'
@@ -261,17 +264,23 @@ function retrain(fresh = false) {
   S.baseline = S.holdout?.n ? Math.max(...counts.values()) / S.holdout.n : null
 
   if (fresh) {
-    const classes = Object.entries(S.tree.probabilities).sort((a, b) => b[1] - a[1])
-    S.colors = new Map(classes.map(([k], i) => [k, PALETTE[i % PALETTE.length]]))
+    S.classes = Object.entries(S.tree.probabilities)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k]) => k)
+    setColors()
     S.predictUs = null
     resetForest()
   }
 
-  if (fresh) {
-    $('tree-scroll').scrollTop = 0
-    $('tree-scroll').scrollLeft = 0
-  }
   drawTree()
+  if (fresh) {
+    // A new dataset opens centred on the root; later answers scroll to the branch they follow.
+    const box = $('tree-scroll')
+    const root = S.nodes.get('r')
+    box.scrollLeft = 0
+    box.scrollTop = root ? Math.max(0, root.y + H / 2 - box.clientHeight / 2) : 0
+    S.stay = true
+  }
   renderImportance()
   renderRules()
   answer()
@@ -279,7 +288,22 @@ function retrain(fresh = false) {
   scheduleBench()
 }
 
-const colorOf = (label) => S.colors.get(String(label)) ?? PALETTE[PALETTE.length - 1]
+function setColors() {
+  const palette = PALETTE()
+  S.colors = new Map(S.classes.map((k, i) => [k, palette[i % palette.length]]))
+}
+const colorOf = (label) => S.colors.get(String(label)) ?? PALETTE().at(-1)
+
+darkMode.addEventListener('change', () => {
+  if (!S.model) return
+  setColors()
+  const box = $('tree-scroll')
+  const { scrollLeft, scrollTop } = box
+  drawTree()
+  S.hold = true
+  answer()
+  box.scrollTo(scrollLeft, scrollTop)
+})
 
 // Measures real prediction speed on this model, after interaction settles.
 let benchTimer
@@ -301,11 +325,12 @@ function scheduleBench() {
   }, 150)
 }
 
-// ---------------------------------------------------------------- stats
+// ---------------------------------------------------------------- figures
 
-function stat(id, k, v, s, flash) {
+function figure(id, v, s, flash) {
   const el = $(id)
-  el.innerHTML = `<div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div>`
+  el.querySelector('dd').innerHTML = v
+  el.querySelector('small').textContent = s
   if (flash) {
     el.classList.remove('flash')
     void el.offsetWidth
@@ -315,19 +340,16 @@ function stat(id, k, v, s, flash) {
 
 function renderStats() {
   const { rows, attributes } = S.data
-  stat('st-data', 'Data', rows.length.toLocaleString(), `rows × ${attributes.length} columns`)
-  stat('st-train', 'Training', fmtMs(S.trainMs), `${S.leaves.toLocaleString()} leaves, ${S.depth} levels deep`)
-  stat(
-    'st-speed',
-    'Per answer',
+  figure('f-train', fmtMs(S.trainMs), `${rows.length.toLocaleString()} rows · ${S.leaves.toLocaleString()} leaves · ${S.depth} deep`)
+  figure(
+    'f-speed',
     S.predictUs ? `${S.predictUs < 10 ? S.predictUs.toFixed(1) : Math.round(S.predictUs)} µs` : '…',
     S.predictUs ? `${compact.format(1e6 / S.predictUs)} answers a second` : 'measuring'
   )
-  stat(
-    'st-acc',
-    'Accuracy',
+  figure(
+    'f-acc',
     S.holdout ? pct1(S.holdout.accuracy) : '–',
-    S.holdout ? `${S.holdout.n} unseen rows · baseline ${pct(S.baseline)}` : 'too few rows to test'
+    S.holdout ? `on ${S.holdout.n} unseen rows · baseline ${pct(S.baseline)}` : 'too few rows to test'
   )
 }
 
@@ -338,9 +360,7 @@ function resetForest() {
   forestToken++
   forestWorker?.terminate()
   forestWorker = null
-  $('st-forest').innerHTML = `<div class="k">Random forest</div>
-    <button type="button" class="btn primary" id="forest-go">Train 100 trees</button>
-    <div class="s">in a background worker</div>`
+  figure('f-forest', '<button type="button" class="go" id="forest-go">Train 100 trees</button>', '100 trees, in a background thread')
 }
 
 function runForest() {
@@ -350,16 +370,16 @@ function runForest() {
   forestWorker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' })
   forestWorker.onmessage = ({ data }) => {
     if (token !== forestToken) return
-    const delta = treeAccuracy == null ? '' : ` · ${data.accuracy >= treeAccuracy ? '+' : '−'}${Math.abs((data.accuracy - treeAccuracy) * 100).toFixed(1)} pts vs tree`
-    stat('st-forest', 'Random forest', pct1(data.accuracy), `${data.trees} trees in ${fmtMs(data.ms)}${delta}`, true)
+    const delta = treeAccuracy == null ? '' : ` · ${data.accuracy >= treeAccuracy ? '+' : '−'}${Math.abs((data.accuracy - treeAccuracy) * 100).toFixed(1)} pts vs the tree`
+    figure('f-forest', pct1(data.accuracy), `${data.trees} trees in ${fmtMs(data.ms)}${delta}`, true)
     forestWorker.terminate()
     forestWorker = null
   }
   forestWorker.postMessage({ attributes: S.data.attributes, rows: S.data.rows, target: S.target })
-  stat('st-forest', 'Random forest', '…', 'growing 100 trees')
+  figure('f-forest', '<span class="wait">…</span>', 'growing 100 trees')
 }
 
-$('stats').addEventListener('click', (e) => e.target.id === 'forest-go' && runForest())
+$('figures').addEventListener('click', (e) => e.target.id === 'forest-go' && runForest())
 
 // ---------------------------------------------------------------- knobs
 
@@ -509,11 +529,11 @@ function answer() {
   const { conds, unknown } = describe(r.path)
   let why = conds.length ? `because ${conds.map((c) => `<code>${esc(c)}</code>`).join(' and ')}` : ''
   if (unknown) why += `${why ? ', then ' : ''}averaged over every <code>${esc(unknown)}</code> branch, since it's blank`
-  if (!asked) why = 'This is the overall mix. Set any field, or click a node in the tree, to narrow it down.'
+  if (!asked) why = 'Nothing is known yet, so this is the overall mix. Set a field below, or click a branch in the tree.'
   else if (!why) why = 'No split applies, so this is the overall mix.'
   const probs = Object.entries(r.probabilities).sort((a, b) => b[1] - a[1])
   $('answer').innerHTML = `
-    <div class="top"><span class="big">${esc(r.label)}</span><span class="chance">${pct(r.chance)} sure</span><span class="time" id="answer-time"></span></div>
+    <div class="top"><span class="big" style="--c:${colorOf(r.label)}">${esc(r.label)}</span><span class="chance">${pct(r.chance)} sure</span><span class="time" id="answer-time"></span></div>
     <p class="why">${why}</p>
     <div class="mix">${probs.map(([k, p]) => `<i style="flex-grow:${p};background:${colorOf(k)}"></i>`).join('')}</div>
     <div class="legend">${probs
@@ -546,7 +566,7 @@ function drawTree() {
   measure(S.tree, 0)
   S.leaves = leaves
   S.depth = depth
-  $('tree-size').textContent = `· ${count.toLocaleString()} nodes`
+  $('tree-size').textContent = `${count.toLocaleString()} nodes`
   S.nodes = new Map()
   if (count > MAX_NODES) {
     $('tree').innerHTML = `<p class="too-big">${count.toLocaleString()} nodes is too many to draw nicely.<br>Lower the depth or raise the minimum leaf size.</p>`
@@ -572,36 +592,36 @@ function drawTree() {
   const width = PAD * 2 + depth * COL + W
   const height = PAD * 2 + (leaves - 1) * ROW + H
   const total = S.tree.samples
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-    <defs><clipPath id="nc"><rect width="${W}" height="${H}" rx="8"/></clipPath></defs>`
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`
+  // Edges are coloured by the branch's majority class and as thick as the share of rows flowing through.
   for (const [p, c] of links) {
-    const x1 = p.x + W
+    const x1 = p.x + W + 8
     const y1 = p.y + H / 2
-    const x2 = c.x
+    const x2 = c.x - 8
     const y2 = c.y + H / 2
     const mx = (x1 + x2) / 2
-    const sw = 1 + 10 * (c.node.samples / total)
-    svg += `<path class="link-path" data-key="${c.key}" d="M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}" stroke-width="${sw.toFixed(2)}"/>`
+    const sw = 1.5 + 16 * Math.sqrt(c.node.samples / total)
+    svg += `<path class="flow" data-key="${c.key}" d="M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}" stroke="${colorOf(c.node.label)}" stroke-width="${sw.toFixed(2)}"/>`
   }
   for (const n of nodes) {
     const { label, chance, samples, probabilities } = n.node
     const pred = `${label} ${pct(chance)}`
-    const room = Math.max(4, Math.floor((W - 34 - pred.length * 7.2) / 6.95))
+    const room = Math.max(4, Math.floor((W - 30 - pred.length * 7) / 6.9))
     const test = n.test.length > room ? `${n.test.slice(0, room - 1)}…` : n.test
     let x = 0
     const mix = Object.entries(probabilities)
       .map(([k, p]) => {
-        const r = `<rect x="${x.toFixed(1)}" y="${H - 3}" width="${(p * W).toFixed(1)}" height="3" fill="${colorOf(k)}"/>`
+        const r = `<rect x="${x.toFixed(1)}" y="${H - 7}" width="${(p * W).toFixed(1)}" height="3" fill="${colorOf(k)}"/>`
         x += p * W
         return r
       })
       .join('')
     const tip = [n.test, `${rowsOf(samples)} rows`, ...Object.entries(probabilities).map(([k, p]) => `${k}: ${pct1(p)}`)].join('\n')
     svg += `<g class="node" data-key="${n.key}" transform="translate(${n.x} ${n.y})"><title>${esc(tip)}</title>
-      <rect class="box" width="${W}" height="${H}" rx="8"/><g clip-path="url(#nc)">${mix}</g>
-      <circle cx="12" cy="${H / 2 - 1}" r="3.5" fill="${colorOf(label)}"/>
-      <text class="test" x="22" y="${H / 2 + 3}">${esc(test)}</text>
-      <text class="pred" x="${W - 10}" y="${H / 2 + 3}" text-anchor="end" fill="currentColor">${esc(pred)}</text></g>`
+      <rect class="hit" x="-6" y="-2" width="${W + 12}" height="${H + 4}" rx="4"/>
+      <text class="test" x="0" y="${H / 2 - 1}">${esc(test)}</text>
+      <text class="pred" x="${W}" y="${H / 2 - 1}" text-anchor="end">${esc(pred)}</text>
+      <g clip-path="inset(0 round 2px)">${mix}</g></g>`
   }
   $('tree').innerHTML = `${svg}</svg>`
 }
@@ -624,14 +644,45 @@ function highlight(path, active) {
     keys.push(key)
   }
   for (const k of keys) for (const el of svg.querySelectorAll(`[data-key="${k}"]`)) el.classList.add('on')
-  reveal(keys.slice(1).map((k) => S.nodes.get(k)).filter(Boolean))
+  const pathNodes = keys.map((k) => S.nodes.get(k)).filter(Boolean)
+  if (S.hold) S.hold = false
+  else if (S.stay) {
+    S.stay = false
+    revealFromRoot(pathNodes)
+  } else reveal(pathNodes.slice(1))
+}
+
+// First view of a dataset: the root at the left, with as much of the path as fits.
+function revealFromRoot(nodes) {
+  const box = $('tree-scroll')
+  const pad = 20
+  const margin = 20
+  for (let k = nodes.length; k >= 2; k--) {
+    const part = nodes.slice(0, k)
+    const x0 = Math.min(...part.map((n) => n.x)) + pad - margin
+    const x1 = Math.max(...part.map((n) => n.x)) + W + pad + margin
+    const y0 = Math.min(...part.map((n) => n.y)) - margin
+    const y1 = Math.max(...part.map((n) => n.y)) + H + margin
+    if (x1 - x0 <= box.clientWidth && y1 - y0 <= box.clientHeight) {
+      box.scrollLeft = Math.max(0, x0)
+      box.scrollTop = Math.max(0, (y0 + y1) / 2 - box.clientHeight / 2)
+      return
+    }
+  }
+  // Not even the first branch fits: put the root at the edge away from it, so the flow crosses the view.
+  const root = nodes[0]
+  const next = nodes[1]
+  box.scrollLeft = 0
+  if (!next || next.y === root.y) box.scrollTop = Math.max(0, root.y + H / 2 - box.clientHeight / 2)
+  else if (next.y < root.y) box.scrollTop = Math.max(0, root.y + H + margin - box.clientHeight)
+  else box.scrollTop = Math.max(0, root.y - margin)
 }
 
 // Scroll the least needed to show the whole path; if it can't fit, favour the leaf end.
 function reveal(nodes) {
   if (!nodes.length) return
   const box = $('tree-scroll')
-  const pad = 16 // container padding
+  const pad = 20 // container padding
   const margin = 20
   const fit = (lo, hi, start, size) => {
     if (hi - lo + 2 * margin > size) return hi + margin - size // too big: keep the far end
@@ -706,7 +757,7 @@ function renderRules() {
     .map(({ node, steps }) => {
       const { conds } = describe(steps)
       return `<li><span class="if">${esc(conds.join(' and ') || 'always')}</span>
-        <span class="then">→ ${esc(node.label)} <small>${pct(node.chance)} · ${rowsOf(node.samples)} rows</small></span></li>`
+        <span class="then"><i style="background:${colorOf(node.label)}"></i>${esc(node.label)} <small>${pct(node.chance)} · ${rowsOf(node.samples)} rows</small></span></li>`
     })
     .join('')
 }

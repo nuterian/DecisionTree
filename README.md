@@ -20,7 +20,8 @@ milliseconds, ask anything, and see exactly why it answered.
   what's on screen.
 
 No build step, no framework, and nothing leaves your browser. Fonts are
-self-hosted (Inter and JetBrains Mono, SIL Open Font License).
+self-hosted (Instrument Serif, Inter and JetBrains Mono, all under the SIL
+Open Font License).
 
 ## Run locally
 
