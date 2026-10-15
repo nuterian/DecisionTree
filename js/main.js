@@ -104,7 +104,10 @@ function toTable(text) {
 function renderTabs() {
   const tabs = [...DATASETS.map((d) => [d.key, d.name]), ['custom', 'Your CSV']]
   $('tabs').innerHTML = tabs
-    .map(([k, name]) => `<button type="button" class="tab" role="tab" data-src="${k}" aria-selected="${k === S.source}">${esc(name)}</button>`)
+    .map(
+      ([k, name]) => `<button type="button" class="tab" role="tab" data-src="${k}" aria-selected="${k === S.source}">
+        <svg class="i"><use href="#i-${k === 'custom' ? 'csv' : k}"/></svg>${esc(name)}</button>`
+    )
     .join('')
 }
 
@@ -120,19 +123,32 @@ function loadSource(key) {
   if (key !== 'custom' && !DATASETS.some((d) => d.key === key)) key = DATASETS[0].key
   S.source = key
   renderTabs()
-  $('custom').hidden = key !== 'custom'
   if (key === 'custom') {
     $('blurb').textContent = 'Your own data. Nothing leaves this browser.'
     if (!$('csv').value) $('csv').value = storage.get() ?? ''
     S.data = null
+    setEditing(true)
     buildCustom()
     return
   }
+  setEditing(false)
   const ds = DATASETS.find((d) => d.key === key)
   $('blurb').textContent = ds.blurb
   ds.prepared ??= prepare(ds.make())
   setData(ds.prepared, ds)
 }
+
+// In "Your CSV", the editor and the tree take turns in the same space.
+function setEditing(on) {
+  S.editing = on
+  $('custom').hidden = !on
+  $('app').hidden = on || !S.data
+  $('edit-data').hidden = S.source !== 'custom' || on
+  if (on) $('csv').focus({ preventScroll: true })
+}
+
+$('edit-data').addEventListener('click', () => setEditing(true))
+$('show-tree').addEventListener('click', () => S.data && setEditing(false))
 
 function setData(data, preset = {}) {
   S.data = data
@@ -146,7 +162,7 @@ function setData(data, preset = {}) {
   S.query = Object.fromEntries(
     Object.entries(preset.example ?? {}).filter(([k]) => k !== S.target && data.attributes.includes(k))
   )
-  $('app').hidden = false
+  $('app').hidden = !!S.editing
   syncKnobs()
   renderTargets()
   renderFields()
@@ -180,7 +196,9 @@ function buildCustom() {
   const text = $('csv').value
   storage.set(text)
   if (!text.trim()) {
+    S.data = null
     $('app').hidden = true
+    $('show-tree').disabled = true
     customStatus('Paste or drop a CSV to begin.')
     return
   }
@@ -192,10 +210,13 @@ function buildCustom() {
       ? { target: S.target, ...S.opts, example: S.query }
       : { maxDepth: data.rows.length > 200 ? 6 : Infinity, minSamplesLeaf: data.rows.length > 200 ? 3 : 1 }
     setData(data, preset)
-    customStatus(`${data.rows.length.toLocaleString()} rows · ${data.attributes.length} columns`)
+    $('show-tree').disabled = false
+    customStatus(`${data.rows.length.toLocaleString()} rows · ${data.attributes.length} columns · the tree is ready`)
   } catch (err) {
-    customStatus(err.message, true)
+    S.data = null
     $('app').hidden = true
+    $('show-tree').disabled = true
+    customStatus(err.message, true)
   }
 }
 
@@ -269,6 +290,8 @@ function retrain(fresh = false) {
       .map(([k]) => k)
     setColors()
     S.predictUs = null
+    S.animateFigures = true
+    S.growTree = true
     resetForest()
   }
 
@@ -338,18 +361,39 @@ function figure(id, v, s, flash) {
   }
 }
 
+// Counts a figure up from zero; used when a dataset first appears.
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)')
+function countUp(id, value, format, s) {
+  const dd = $(id).querySelector('dd')
+  if (reduceMotion.matches) return figure(id, format(value), s)
+  $(id).querySelector('small').textContent = s
+  const t0 = performance.now()
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / 650)
+    const e = 1 - Math.pow(1 - k, 3)
+    dd.textContent = format(value * e)
+    if (k < 1) requestAnimationFrame(step)
+  }
+  requestAnimationFrame(step)
+}
+
 function renderStats() {
-  const { rows, attributes } = S.data
-  figure('f-train', fmtMs(S.trainMs), `${rows.length.toLocaleString()} rows · ${S.leaves.toLocaleString()} leaves · ${S.depth} deep`)
+  const { rows } = S.data
+  const trainNote = `${rows.length.toLocaleString()} rows, ${S.leaves.toLocaleString()} leaves`
+  const accNote = S.holdout ? `on unseen rows, vs ${pct(S.baseline)} by guessing` : 'too few rows to test'
+  if (S.animateFigures) {
+    S.animateFigures = false
+    countUp('f-train', S.trainMs, fmtMs, trainNote)
+    if (S.holdout) countUp('f-acc', S.holdout.accuracy, pct1, accNote)
+    else figure('f-acc', '–', accNote)
+  } else {
+    figure('f-train', fmtMs(S.trainMs), trainNote)
+    figure('f-acc', S.holdout ? pct1(S.holdout.accuracy) : '–', accNote)
+  }
   figure(
     'f-speed',
     S.predictUs ? `${S.predictUs < 10 ? S.predictUs.toFixed(1) : Math.round(S.predictUs)} µs` : '…',
-    S.predictUs ? `${compact.format(1e6 / S.predictUs)} answers a second` : 'measuring'
-  )
-  figure(
-    'f-acc',
-    S.holdout ? pct1(S.holdout.accuracy) : '–',
-    S.holdout ? `on ${S.holdout.n} unseen rows · baseline ${pct(S.baseline)}` : 'too few rows to test'
+    S.predictUs ? `${compact.format(1e6 / S.predictUs)} answers a second` : 'measuring…'
   )
 }
 
@@ -360,7 +404,7 @@ function resetForest() {
   forestToken++
   forestWorker?.terminate()
   forestWorker = null
-  figure('f-forest', '<button type="button" class="go" id="forest-go">Train 100 trees</button>', '100 trees, in a background thread')
+  figure('f-forest', '<button type="button" class="go" id="forest-go">Train 100 trees</button>', '100 trees, off the main thread')
 }
 
 function runForest() {
@@ -370,8 +414,8 @@ function runForest() {
   forestWorker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' })
   forestWorker.onmessage = ({ data }) => {
     if (token !== forestToken) return
-    const delta = treeAccuracy == null ? '' : ` · ${data.accuracy >= treeAccuracy ? '+' : '−'}${Math.abs((data.accuracy - treeAccuracy) * 100).toFixed(1)} pts vs the tree`
-    figure('f-forest', pct1(data.accuracy), `${data.trees} trees in ${fmtMs(data.ms)}${delta}`, true)
+    const delta = treeAccuracy == null ? '' : `, ${data.accuracy >= treeAccuracy ? '+' : '−'}${Math.abs((data.accuracy - treeAccuracy) * 100).toFixed(1)} pts vs the tree`
+    figure('f-forest', pct1(data.accuracy), `${fmtMs(data.ms)}${delta}`, true)
     forestWorker.terminate()
     forestWorker = null
   }
@@ -533,13 +577,14 @@ function answer() {
   else if (!why) why = 'No split applies, so this is the overall mix.'
   const probs = Object.entries(r.probabilities).sort((a, b) => b[1] - a[1])
   $('answer').innerHTML = `
-    <div class="top"><span class="big" style="--c:${colorOf(r.label)}">${esc(r.label)}</span><span class="chance">${pct(r.chance)} sure</span><span class="time" id="answer-time"></span></div>
+    <div class="top"><span class="big${S.lastLabel !== r.label ? ' pop' : ''}" style="--c:${colorOf(r.label)}">${esc(r.label)}</span><span class="chance">${pct(r.chance)} sure</span><span class="time" id="answer-time"></span></div>
     <p class="why">${why}</p>
     <div class="mix">${probs.map(([k, p]) => `<i style="flex-grow:${p};background:${colorOf(k)}"></i>`).join('')}</div>
     <div class="legend">${probs
       .slice(0, 6)
       .map(([k, p]) => `<span style="--c:${colorOf(k)}">${esc(k)} <b>${pct(p)}</b></span>`)
       .join('')}</div>`
+  S.lastLabel = r.label
   renderAnswerTime()
   highlight(r.path, asked)
   renderCode(query, r, conds)
@@ -577,7 +622,7 @@ function drawTree() {
   const links = []
   let slot = 0
   const layout = (node, d, test, key, parent) => {
-    const n = { node, test, key, x: PAD + d * COL, y: 0 }
+    const n = { node, test, key, depth: d, x: PAD + d * COL, y: 0 }
     nodes.push(n)
     S.nodes.set(key, n)
     if (parent) links.push([parent, n])
@@ -592,7 +637,9 @@ function drawTree() {
   const width = PAD * 2 + depth * COL + W
   const height = PAD * 2 + (leaves - 1) * ROW + H
   const total = S.tree.samples
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`
+  const grow = S.growTree && count <= 400 && !reduceMotion.matches
+  S.growTree = false
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" class="${grow ? 'grow' : ''}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`
   // Edges are coloured by the branch's majority class and as thick as the share of rows flowing through.
   for (const [p, c] of links) {
     const x1 = p.x + W + 8
@@ -601,7 +648,7 @@ function drawTree() {
     const y2 = c.y + H / 2
     const mx = (x1 + x2) / 2
     const sw = 1.5 + 16 * Math.sqrt(c.node.samples / total)
-    svg += `<path class="flow" data-key="${c.key}" d="M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}" stroke="${colorOf(c.node.label)}" stroke-width="${sw.toFixed(2)}"/>`
+    svg += `<path class="flow" data-key="${c.key}" style="--d:${c.depth - 1}" pathLength="1" d="M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}" stroke="${colorOf(c.node.label)}" stroke-width="${sw.toFixed(2)}"/>`
   }
   for (const n of nodes) {
     const { label, chance, samples, probabilities } = n.node
@@ -617,7 +664,7 @@ function drawTree() {
       })
       .join('')
     const tip = [n.test, `${rowsOf(samples)} rows`, ...Object.entries(probabilities).map(([k, p]) => `${k}: ${pct1(p)}`)].join('\n')
-    svg += `<g class="node" data-key="${n.key}" transform="translate(${n.x} ${n.y})"><title>${esc(tip)}</title>
+    svg += `<g class="node" data-key="${n.key}" style="--d:${n.depth}" transform="translate(${n.x} ${n.y})"><title>${esc(tip)}</title>
       <rect class="hit" x="-6" y="-2" width="${W + 12}" height="${H + 4}" rx="4"/>
       <text class="test" x="0" y="${H / 2 - 1}">${esc(test)}</text>
       <text class="pred" x="${W}" y="${H / 2 - 1}" text-anchor="end">${esc(pred)}</text>
@@ -800,10 +847,21 @@ function renderPreview() {
   $('preview').innerHTML =
     `<thead><tr>${attributes.map((a) => `<th>${esc(a)}</th>`).join('')}</tr></thead>` +
     `<tbody>${rows
-      .slice(0, 10)
+      .slice(0, 12)
       .map((r) => `<tr>${r.map(cell).join('')}</tr>`)
       .join('')}</tbody>`
 }
+
+// ---------------------------------------------------------------- insight tabs
+
+function showPane(name) {
+  for (const b of $('insight-tabs').children) b.setAttribute('aria-selected', b.dataset.tab === name)
+  for (const p of document.querySelectorAll('.pane')) p.hidden = p.dataset.pane !== name
+}
+$('insight-tabs').addEventListener('click', (e) => {
+  const tab = e.target.closest('[data-tab]')
+  if (tab) showPane(tab.dataset.tab)
+})
 
 // ---------------------------------------------------------------- start
 

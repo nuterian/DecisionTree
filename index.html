@@ -7,49 +7,70 @@
   <meta name="description" content="Grow a decision tree from a table in milliseconds, ask it anything, and read the branch it followed. A live demo of ditify, a tiny JavaScript library.">
   <link rel="icon" href="data:,">
   <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/instrument-serif-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/newsreader-display-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/style.css">
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
-  <header class="wrap">
-    <nav>
+  <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-churn" viewBox="0 0 16 16"><circle cx="6" cy="5" r="2.5"/><path d="M1.5 14c0-2.6 2-4.5 4.5-4.5s4.5 1.9 4.5 4.5"/><path d="M10.5 6H15m-1.8-1.8L15 6l-1.8 1.8"/></symbol>
+    <symbol id="i-loans" viewBox="0 0 16 16"><path d="M2 6 8 2.5 14 6"/><path d="M3.5 7v5M8 7v5M12.5 7v5M2 13.5h12"/></symbol>
+    <symbol id="i-tennis" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M4 3.5c2.2 1.6 2.2 7.4 0 9M12 3.5c-2.2 1.6-2.2 7.4 0 9"/></symbol>
+    <symbol id="i-csv" viewBox="0 0 16 16"><path d="M4 1.5h5l3.5 3.5v9.5h-8.5z"/><path d="M9 1.5V5h3.5M6 9h4M6 11.5h4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M9 1.5 3 9h4.5L7 14.5 13 7H8.5z"/></symbol>
+    <symbol id="i-target" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.3"/></symbol>
+    <symbol id="i-forest" viewBox="0 0 16 16"><path d="M8 1.5 4.8 7h6.4zM8 7v7.5"/><path d="M3 6 1.2 9.2H4.8M3 9.2v4.3M13 6l-1.8 3.2h3.6M13 9.2v4.3"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 16 16"><path d="M1.5 8h4c2.2 0 2.2-3.5 4.5-3.5h4.5M5.5 8c2.2 0 2.2 3.5 4.5 3.5h4.5"/></symbol>
+    <symbol id="i-ask" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M6.2 6.4a1.9 1.9 0 1 1 2.6 1.8c-.6.3-.8.7-.8 1.3M8 11.6h.01"/></symbol>
+    <symbol id="i-bars" viewBox="0 0 16 16"><path d="M2 3.5h12M2 8h8.5M2 12.5h5"/></symbol>
+    <symbol id="i-rules" viewBox="0 0 16 16"><path d="M5.5 4h9M5.5 8h9M5.5 12h9"/><circle cx="2.3" cy="4" r=".9" fill="currentColor" stroke="none"/><circle cx="2.3" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="2.3" cy="12" r=".9" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-code" viewBox="0 0 16 16"><path d="m5 4-4 4 4 4M11 4l4 4-4 4"/></symbol>
+    <symbol id="i-table" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1"/><path d="M1.5 6.5h13M6 2.5v11"/></symbol>
+    <symbol id="i-depth" viewBox="0 0 16 16"><path d="M2 3.5h12M4 8h8M6 12.5h4"/></symbol>
+    <symbol id="i-leaf" viewBox="0 0 16 16"><path d="M13.5 2.5C7 2.5 3 6 3 12.5c6 0 9.5-3.5 10.5-10z"/><path d="M3 12.5c2-3.5 4.5-6 7.5-8"/></symbol>
+    <symbol id="i-smooth" viewBox="0 0 16 16"><path d="M1.5 10.5c2-7 4.5-7 6.5 0s4.5 7 6.5 0"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 16 16"><path d="M11 2.5 13.5 5 6 12.5H3.5V10z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 16 16"><path d="M3 13 13 3M6 3h7v7"/></symbol>
+  </svg>
+
+  <div class="shell">
+    <nav class="wrap">
       <span class="word">ditify</span>
-      <span class="links"><a href="#tree-panel">The tree</a><a href="#code-panel">The code</a><a href="https://github.com/nuterian/ditify">GitHub</a></span>
+      <a class="nav-link" href="https://github.com/nuterian/ditify">Source on GitHub <svg class="i"><use href="#i-arrow"/></svg></a>
     </nav>
 
-    <div class="hero">
+    <header class="wrap hero">
       <div class="hero-text">
         <h1>Every answer comes <em>with its reasons.</em></h1>
-        <p class="lede">A decision tree grown from a table, in your browser, in milliseconds. Tell it what you know and it
-          answers with the branch it followed, so you can see exactly why.</p>
+        <p class="lede">A decision tree grown from a table in your browser. Tell it what you know; it answers with the branch it followed.</p>
       </div>
       <dl class="figures" id="figures">
-        <div id="f-train"><dt>Trained in</dt><dd>…</dd><small></small></div>
-        <div id="f-speed"><dt>Per answer</dt><dd>…</dd><small></small></div>
-        <div id="f-acc"><dt>Accuracy</dt><dd>…</dd><small></small></div>
-        <div id="f-forest"><dt>Forest</dt><dd>…</dd><small></small></div>
+        <div id="f-train"><dt><svg class="i"><use href="#i-clock"/></svg>Trained in</dt><dd>…</dd><small></small></div>
+        <div id="f-speed"><dt><svg class="i"><use href="#i-bolt"/></svg>Per answer</dt><dd>…</dd><small></small></div>
+        <div id="f-acc"><dt><svg class="i"><use href="#i-target"/></svg>Accuracy</dt><dd>…</dd><small></small></div>
+        <div id="f-forest"><dt><svg class="i"><use href="#i-forest"/></svg>Forest</dt><dd>…</dd><small></small></div>
       </dl>
-    </div>
-  </header>
+    </header>
 
-  <main class="wrap">
-    <div class="sources">
-      <span class="num">01</span>
-      <div class="tabs" id="tabs" role="tablist"></div>
-      <p class="blurb" id="blurb"></p>
-    </div>
-
-    <section id="custom" class="custom" hidden>
-      <textarea id="csv" spellcheck="false" placeholder="Paste a CSV here, or drop a file on this box. The first row names the columns."></textarea>
-      <div class="custom-bar">
-        <label class="go">Open a file<input type="file" id="file" accept=".csv,.tsv,.txt,text/csv" hidden></label>
-        <span id="csv-status" class="muted"></span>
+    <main class="wrap">
+      <div class="sources">
+        <span class="num">01</span>
+        <div class="tabs" id="tabs" role="tablist"></div>
+        <p class="blurb" id="blurb"></p>
+        <button type="button" class="link" id="edit-data" hidden><svg class="i"><use href="#i-edit"/></svg>Edit the data</button>
       </div>
-    </section>
 
-    <div id="app">
-      <section class="work">
+      <section id="custom" class="custom" hidden>
+        <textarea id="csv" spellcheck="false" placeholder="Paste a CSV here, or drop a file on this box. The first row names the columns."></textarea>
+        <div class="custom-bar">
+          <label class="go ghost">Open a file<input type="file" id="file" accept=".csv,.tsv,.txt,text/csv" hidden></label>
+          <span id="csv-status" class="muted"></span>
+          <button type="button" class="go" id="show-tree" disabled>Show the tree <svg class="i"><use href="#i-branch"/></svg></button>
+        </div>
+      </section>
+
+      <div id="app" class="work">
         <aside class="ask">
           <div class="target-row">
             <span class="num">02</span><span class="label">Predict</span>
@@ -57,51 +78,56 @@
           </div>
           <div id="answer" class="answer" aria-live="polite"></div>
           <div class="ask-head">
-            <h2>What you know</h2>
+            <h2><svg class="i"><use href="#i-ask"/></svg>What you know</h2>
             <button type="button" class="link" id="reset">Clear</button>
           </div>
           <div id="fields" class="fields"></div>
         </aside>
 
-        <div class="viz" id="tree-panel">
+        <section class="viz" id="tree-panel">
           <div class="viz-head">
-            <h2><span class="num">03</span>The tree <span class="muted" id="tree-size"></span></h2>
+            <h2><span class="num">03</span><svg class="i"><use href="#i-branch"/></svg>The tree <span class="muted" id="tree-size"></span></h2>
             <div class="knobs">
-              <label>Depth <output id="depth-out"></output><input type="range" id="depth" min="1" max="12"></label>
-              <label>Min leaf <output id="leaf-out"></output><input type="range" id="leaf" min="1" max="60"></label>
-              <label>Smoothing <output id="shrink-out"></output><input type="range" id="shrink" min="0" max="40"></label>
+              <label title="How many questions deep the tree may grow"><svg class="i"><use href="#i-depth"/></svg>Depth <output id="depth-out"></output><input type="range" id="depth" min="1" max="12"></label>
+              <label title="Smallest group a branch may end in"><svg class="i"><use href="#i-leaf"/></svg>Min leaf <output id="leaf-out"></output><input type="range" id="leaf" min="1" max="60"></label>
+              <label title="How much small groups defer to their parents"><svg class="i"><use href="#i-smooth"/></svg>Smoothing <output id="shrink-out"></output><input type="range" id="shrink" min="0" max="40"></label>
             </div>
           </div>
           <div class="tree-scroll" id="tree-scroll"><div id="tree"></div></div>
-          <p class="hint">Branches are as thick as the share of rows that flow through them. Drag a knob to regrow the tree; click any branch to ask about it.</p>
-        </div>
-      </section>
+          <p class="hint">Branches are as thick as the share of rows flowing through them. Drag a knob to regrow the tree; click any branch to ask about it.</p>
+        </section>
 
-      <section class="below">
-        <div>
-          <h2>What matters</h2>
-          <div id="importance" class="bars"></div>
-        </div>
-        <div>
-          <h2>The biggest rules</h2>
-          <ol id="rules" class="rules"></ol>
-        </div>
-        <div id="code-panel">
-          <h2>The code behind this</h2>
-          <pre id="code"></pre>
-        </div>
-      </section>
+        <aside class="insight">
+          <div class="seg-tabs" id="insight-tabs" role="tablist">
+            <button type="button" role="tab" data-tab="matters" aria-selected="true"><svg class="i"><use href="#i-bars"/></svg>What matters</button>
+            <button type="button" role="tab" data-tab="rules" aria-selected="false"><svg class="i"><use href="#i-rules"/></svg>Rules</button>
+            <button type="button" role="tab" data-tab="code" aria-selected="false"><svg class="i"><use href="#i-code"/></svg>Code</button>
+            <button type="button" role="tab" data-tab="data" aria-selected="false"><svg class="i"><use href="#i-table"/></svg>Data</button>
+          </div>
+          <div class="pane" data-pane="matters">
+            <p class="pane-lede">How much each column helped the tree decide.</p>
+            <div id="importance" class="bars"></div>
+          </div>
+          <div class="pane" data-pane="rules" hidden>
+            <p class="pane-lede">The branches that cover the most rows, read as rules.</p>
+            <ol id="rules" class="rules"></ol>
+          </div>
+          <div class="pane" data-pane="code" hidden>
+            <p class="pane-lede">Everything on this page, in five lines of ditify.</p>
+            <pre id="code"></pre>
+          </div>
+          <div class="pane" data-pane="data" hidden>
+            <p class="pane-lede">The first rows of the table the tree learned from.</p>
+            <div class="table-scroll"><table id="preview"></table></div>
+          </div>
+        </aside>
+      </div>
+    </main>
 
-      <details class="peek">
-        <summary>A look at the data</summary>
-        <div class="table-scroll"><table id="preview"></table></div>
-      </details>
-    </div>
-  </main>
-
-  <footer class="wrap">
-    <span>ditify is one JavaScript file, about 20 KB, with no dependencies. MIT licensed.</span>
-    <span><a href="https://github.com/nuterian/ditify">Source on GitHub</a> · Jugal Manjeshwar</span>
-  </footer>
+    <footer class="wrap">
+      <span>ditify is one JavaScript file, about 20 KB, with no dependencies. MIT licensed.</span>
+      <span>Jugal Manjeshwar</span>
+    </footer>
+  </div>
 </body>
 </html>
